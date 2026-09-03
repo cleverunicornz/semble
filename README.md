@@ -229,8 +229,51 @@ Semble runs as an MCP server so agents can search any codebase directly as a nat
 |------|-------------|
 | `search` | Search a codebase with a natural-language or code query. Pass `repo` as a local path or an https:// git URL and `content` as `code`, `docs`, `config`, or `all` (default: `code`). |
 | `find_related` | Given a file path and line number, return chunks semantically similar to the code at that location. |
+| `workspace_search` | Search a clean baseline checkout plus one Git worktree delta. Results remain grouped into `base_results` and `delta_results` and carry `origin` and `change` provenance. |
+| `workspace_changes` | List every changed, added, deleted, or renamed path relative to a workspace's immutable baseline commit. |
+| `workspace_release` | Stop watching a worktree and release its private delta indexes while retaining shared baseline caches. |
 
 For per-agent setup instructions, see the [installation docs](docs/installation.md#mcp-server).
+
+### Git workspace facets
+
+`workspace_search` keeps one immutable baseline keyed by repository identity and commit, plus a private
+delta index for each worktree. The caller supplies a clean `baseline_repo`, current worktree `repo`,
+stable `repository` identity, and exact `base_revision`.
+
+| Scope | Search view |
+| --- | --- |
+| `changed` | Added, modified, and renamed files in the worktree delta |
+| `unchanged` | Baseline files not shadowed or deleted by this worktree |
+| `workspace` | Both current facets, returned separately with provenance |
+| `base` | The complete original baseline, including prior versions of changed or deleted files |
+
+The query embedding and tokens are computed once and reused across both physical indexes. Modified and
+deleted paths logically shadow baseline chunks only for their worktree; the shared baseline is never
+mutated. Watcher events update only affected delta files. Reverting a path removes its delta entry and
+reveals the baseline again.
+
+The same lifecycle is available as a Python API:
+
+```python
+from semble import BaselineRegistry, SearchScope, fetch_remote_baseline, open_git_workspace
+
+identity = fetch_remote_baseline(project_checkout, remote="origin", branch="main")
+# Create the worktree at identity.revision before opening the session.
+session = open_git_workspace(
+    BaselineRegistry(),
+    identity,
+    baseline_root=project_checkout,
+    workspace_root=worktree,
+)
+session.start()
+response = session.index.search("authentication flow", scope=SearchScope.WORKSPACE)
+await session.close()
+```
+
+Fetching updates only the remote-tracking reference; it never moves the caller's checkout. A baseline
+checkout must be clean and have `HEAD == base_revision`, so active worktrees cannot silently follow a
+moving remote branch.
 
 
 ## Benchmarks
@@ -265,7 +308,7 @@ After fusing, results are reranked with a set of code-aware signals:
 
 Because the embedding model is static with no transformer forward pass at query time, all of this runs in milliseconds on CPU.
 
-Indexes are cached to disk automatically on the first search. On subsequent runs, Semble walks the file tree and compares modification times; added, removed, or changed files are reindexed incrementally, without rebuilding the rest of the index. A full rebuild only happens if the indexing settings change (e.g., after a semble upgrade that changes the model, chunking, or cache format). In MCP mode, the index is checked and refreshed automatically as files change, so results stay current across the session.
+Indexes are cached to disk automatically on the first search. On subsequent CLI runs, Semble walks the file tree and compares modification times; added, removed, or changed files are reindexed incrementally without re-embedding unchanged files. In MCP mode, local repositories use a debounced filesystem watcher instead: a relevant source or ignore-rule change invalidates the affected in-memory content index immediately, and the next tool call waits for one shared incremental refresh before searching. Remote Git URLs remain immutable for the MCP server session. A full rebuild only happens when indexing settings change, such as after a Semble upgrade that changes the model, chunking, or cache format.
 
 ### Using a custom model
 

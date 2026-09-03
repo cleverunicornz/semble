@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import numpy.typing as npt
 from model2vec import StaticModel
@@ -12,12 +14,40 @@ from semble.types import Chunk, SearchResult
 _RRF_K = 60
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedQuery:
+    """Query representation shared across one or more compatible indexes."""
+
+    text: str
+    embedding: npt.NDArray[np.float32]
+    tokens: tuple[str, ...]
+    alpha_weight: float
+
+
 def _rrf_scores(scores: dict[Chunk, float]) -> dict[Chunk, float]:
     """Convert raw scores to RRF scores 1/(k + rank); higher raw score → rank 1."""
     if not scores:
         return scores
     ranked = sorted(scores, key=lambda c: -scores[c])
     return {chunk: 1.0 / (_RRF_K + rank) for rank, chunk in enumerate(ranked, 1)}
+
+
+def _search_semantic_prepared(
+    query_embedding: npt.NDArray[np.float32],
+    semantic_index: SelectableBasicBackend,
+    chunks: list[Chunk],
+    top_k: int,
+    selector: npt.NDArray[np.int_] | None,
+    excluded: npt.NDArray[np.int_] | None = None,
+) -> list[SearchResult]:
+    """Run semantic search with an already-computed query embedding."""
+    indices, scores = semantic_index.query(
+        query_embedding,
+        k=top_k,
+        selector=selector,
+        excluded=excluded,
+    )[0]
+    return [SearchResult(chunk=chunks[index], score=1.0 - float(distance)) for index, distance in zip(indices, scores)]
 
 
 def _search_semantic(
@@ -29,10 +59,7 @@ def _search_semantic(
     selector: npt.NDArray[np.int_] | None,
 ) -> list[SearchResult]:
     """Run semantic search for a query."""
-    query_embedding = model.encode([query])
-    indices, scores = semantic_index.query(query_embedding, k=top_k, selector=selector)[0]
-    # Vicinity returns cosine distance; convert to similarity so higher = better.
-    return [SearchResult(chunk=chunks[index], score=1.0 - float(distance)) for index, distance in zip(indices, scores)]
+    return _search_semantic_prepared(model.encode([query]), semantic_index, chunks, top_k, selector)
 
 
 def _sort_top_k(arr: npt.NDArray, top_k: int) -> npt.NDArray[np.int_]:
@@ -44,6 +71,27 @@ def _sort_top_k(arr: npt.NDArray, top_k: int) -> npt.NDArray[np.int_]:
     return partitioned[np.argsort(neg_arr[partitioned])]
 
 
+def _search_bm25_prepared(
+    tokens: tuple[str, ...],
+    bm25_index: BM25,
+    chunks: list[Chunk],
+    top_k: int,
+    selector: npt.NDArray[np.int_] | None,
+    excluded: npt.NDArray[np.int_] | None = None,
+) -> list[SearchResult]:
+    """Return chunks ranked by BM25 score for pre-tokenized query text."""
+    if not tokens:
+        return []
+    mask = selector_to_mask(selector, len(chunks))
+    if excluded is not None:
+        if mask is None:
+            mask = np.ones(len(chunks), dtype=bool)
+        mask[excluded] = False
+    scores: npt.NDArray[np.float32] = bm25_index.get_scores(list(tokens), weight_mask=mask)
+    indices = _sort_top_k(scores, top_k)
+    return [SearchResult(chunk=chunks[i], score=float(scores[i])) for i in indices if scores[i] > 0]
+
+
 def _search_bm25(
     query: str,
     bm25_index: BM25,
@@ -52,15 +100,73 @@ def _search_bm25(
     selector: npt.NDArray[np.int_] | None,
 ) -> list[SearchResult]:
     """Return chunks ranked by BM25 score, excluding zero-score results."""
-    tokens = tokenize(query)
-    if not tokens:
-        return []
-    mask = selector_to_mask(selector, len(chunks))
-    scores: npt.NDArray[np.float32] = bm25_index.get_scores(tokens, weight_mask=mask)
-    indices = _sort_top_k(scores, top_k)
+    return _search_bm25_prepared(tuple(tokenize(query)), bm25_index, chunks, top_k, selector)
 
-    # Exclude chunks with zero score, no query tokens matched.
-    return [SearchResult(chunk=chunks[i], score=float(scores[i])) for i in indices if scores[i] > 0]
+
+def prepare_query(query: str, model: StaticModel, alpha: float | None = None) -> PreparedQuery:
+    """Prepare one query for reuse across compatible indexes."""
+    return PreparedQuery(
+        text=query,
+        embedding=model.encode([query]),
+        tokens=tuple(tokenize(query)),
+        alpha_weight=resolve_alpha(query, alpha),
+    )
+
+
+def search_prepared(
+    prepared: PreparedQuery,
+    semantic_index: SelectableBasicBackend,
+    bm25_index: BM25,
+    chunks: list[Chunk],
+    top_k: int,
+    selector: npt.NDArray[np.int_] | None = None,
+    excluded: npt.NDArray[np.int_] | None = None,
+    rerank: bool = True,
+) -> list[SearchResult]:
+    """Hybrid search using a query representation shared across indexes."""
+    candidate_count = top_k * 5
+    semantic = _search_semantic_prepared(
+        prepared.embedding,
+        semantic_index,
+        chunks,
+        candidate_count,
+        selector,
+        excluded,
+    )
+    semantic_scores = {result.chunk: result.score for result in semantic}
+    bm25_scores = {
+        result.chunk: result.score
+        for result in _search_bm25_prepared(
+            prepared.tokens,
+            bm25_index,
+            chunks,
+            candidate_count,
+            selector,
+            excluded,
+        )
+        if result.score
+    }
+
+    normalized_semantic = _rrf_scores(semantic_scores)
+    normalized_bm25 = _rrf_scores(bm25_scores)
+    all_candidates = sorted(
+        {*normalized_semantic, *normalized_bm25},
+        key=lambda chunk: chunk.start_line,
+    )
+    combined_scores = {
+        chunk: prepared.alpha_weight * normalized_semantic.get(chunk, 0.0)
+        + (1.0 - prepared.alpha_weight) * normalized_bm25.get(chunk, 0.0)
+        for chunk in all_candidates
+    }
+    combined_scores = {chunk: score for chunk, score in combined_scores.items() if score}
+
+    if rerank:
+        boost_multi_chunk_files(combined_scores)
+        combined_scores = apply_query_boost(combined_scores, prepared.text, chunks)
+        ranked = rerank_topk(combined_scores, top_k, penalise_paths=prepared.alpha_weight < 1.0)
+    else:
+        ranked = sorted(combined_scores.items(), key=lambda item: item[1], reverse=True)[:top_k]
+    return [SearchResult(chunk=chunk, score=score) for chunk, score in ranked]
 
 
 def search(
@@ -74,59 +180,13 @@ def search(
     selector: npt.NDArray[np.int_] | None = None,
     rerank: bool = True,
 ) -> list[SearchResult]:
-    """Hybrid search: alpha-weighted combination of semantic and BM25 scores.
-
-    Both score sets are converted to RRF scores before combining, so alpha has
-    a consistent meaning regardless of raw score magnitude.
-
-    :param query: Search query string.
-    :param model: Embedding model for semantic search.
-    :param semantic_index: Pre-built semantic (vector) index.
-    :param bm25_index: Pre-built BM25 index.
-    :param chunks: All indexed chunks (parallel to BM25 index).
-    :param top_k: Number of results to return.
-    :param alpha: Weight for semantic score (1-alpha goes to BM25). None = auto-detect based on query type.
-    :param selector: Optional array of chunk indices to filter results by.
-    :param rerank: Whether to perform code-tuned reranking. On by default for code search, off for docs search.
-    :return: List of search results sorted by combined score descending.
-    """
-    alpha_weight = resolve_alpha(query, alpha)
-
-    # Over-fetch candidates so the merged pool is large enough after union and re-ranking.
-    candidate_count = top_k * 5
-
-    semantic = _search_semantic(query, model, semantic_index, chunks, candidate_count, selector)
-    semantic_scores: dict[Chunk, float] = {result.chunk: result.score for result in semantic}
-    bm25_scores = {}
-    for result in _search_bm25(query, bm25_index, chunks, candidate_count, selector):
-        if result.score:
-            bm25_scores[result.chunk] = result.score
-
-    normalized_semantic = _rrf_scores(semantic_scores)
-    normalized_bm25 = _rrf_scores(bm25_scores)
-
-    # Sort by start line to counteract randomness introduced by hashing.
-    all_candidates = sorted(
-        {*normalized_semantic, *normalized_bm25},
-        key=lambda c: c.start_line,
+    """Hybrid search: alpha-weighted semantic and BM25 reciprocal-rank fusion."""
+    return search_prepared(
+        prepare_query(query, model, alpha),
+        semantic_index,
+        bm25_index,
+        chunks,
+        top_k,
+        selector=selector,
+        rerank=rerank,
     )
-    combined_scores: dict[Chunk, float] = {
-        chunk: alpha_weight * normalized_semantic.get(chunk, 0.0)
-        + (1.0 - alpha_weight) * normalized_bm25.get(chunk, 0.0)
-        for chunk in all_candidates
-    }
-
-    # Remove chunks that have 0.0 score
-    combined_scores = {chunk: score for chunk, score in combined_scores.items() if score}
-
-    if rerank:
-        # Boost files with multiple relevant chunks.
-        boost_multi_chunk_files(combined_scores)
-        # Boost queries with specific identifiers in them.
-        combined_scores = apply_query_boost(combined_scores, query, chunks)
-        # Rerank the top-k results by applying path-based penalties.
-        ranked = rerank_topk(combined_scores, top_k, penalise_paths=alpha_weight < 1.0)
-    else:
-        sorted_by_score = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)
-        ranked = sorted_by_score[:top_k]
-    return [SearchResult(chunk=chunk, score=score) for chunk, score in ranked]

@@ -176,7 +176,7 @@ def test_search_rerank_default_by_content_type(
 ) -> None:
     """Reranking is on by default when code is indexed, off for non-code-only content."""
     index = SembleIndex(mock_model, MagicMock(), MagicMock(), [make_chunk("x = 1", "f.py")], "", content=content)
-    with patch("semble.index.index.search", return_value=[]) as mock_search:
+    with patch("semble.index.index.search_prepared", return_value=[]) as mock_search:
         index.search("function", top_k=3)
     assert mock_search.call_args.kwargs["rerank"] == expect_rerank
 
