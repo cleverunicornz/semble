@@ -3,15 +3,23 @@ import json
 import threading
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from model2vec import StaticModel
 from watchfiles import Change
 
-from semble.mcp import _CACHE_MAX_SIZE, _IndexCache, create_server, serve
+from semble.mcp import _CACHE_MAX_SIZE, _IndexCache, _WorkspaceCache, create_server, serve
 from semble.types import Chunk, ContentType, SearchResult
 from semble.utils import format_results, is_git_url, resolve_chunk
+from semble.workspace import (
+    BaselineIdentity,
+    ChangeKind,
+    SearchOrigin,
+    SearchScope,
+    WorkspaceSearchHit,
+    WorkspaceSearchResponse,
+)
 from tests.conftest import make_chunk
 
 
@@ -264,6 +272,7 @@ async def test_index_cache_watcher_marks_changes_and_closes(change: Change, tmp_
     assert not cache._watch_tasks
     assert watcher.cancelled()
 
+
 @pytest.mark.anyio
 async def test_index_cache_evicts_on_failure(cache: _IndexCache, tmp_path: Path) -> None:
     """A failed build evicts the entry so the next call can retry."""
@@ -406,6 +415,142 @@ async def test_search_builds_exact_content_indexes(
             result = await server.call_tool("search", args)
             payload = json.loads(_tool_text(result))
             assert {Path(item["file_path"]).suffix for item in payload["results"]} == expected_suffixes
+
+
+@pytest.mark.anyio
+async def test_workspace_search_tool_returns_scoped_provenance(cache: _IndexCache, tmp_path: Path) -> None:
+    """workspace_search preserves separate base/delta facets and honors location-only output."""
+    identity = BaselineIdentity("example/repository", "a" * 40)
+    response = WorkspaceSearchResponse(
+        baseline=identity,
+        scope=SearchScope.WORKSPACE,
+        changed_file_count=1,
+        base_results=(
+            WorkspaceSearchHit(
+                SearchResult(make_chunk("def stable(): pass", "stable.py"), 0.7),
+                SearchOrigin.BASE,
+                ChangeKind.UNCHANGED,
+            ),
+        ),
+        delta_results=(
+            WorkspaceSearchHit(
+                SearchResult(make_chunk("def changed(): pass", "changed.py"), 0.9),
+                SearchOrigin.DELTA,
+                ChangeKind.MODIFIED,
+            ),
+        ),
+    )
+    session = MagicMock()
+    session.index.search.return_value = response
+    workspace_cache = MagicMock()
+    workspace_cache.get = AsyncMock(return_value=session)
+    server = create_server(cache, workspace_cache=workspace_cache)
+    result = await server.call_tool(
+        "workspace_search",
+        {
+            "query": "changed behavior",
+            "repo": str(tmp_path / "worktree"),
+            "baseline_repo": str(tmp_path / "baseline"),
+            "repository": identity.repository,
+            "base_revision": identity.revision,
+            "scope": "workspace",
+            "top_k": 5,
+            "max_snippet_lines": 0,
+        },
+    )
+    payload = json.loads(_tool_text(result))
+    assert payload["baseline"] == {
+        "repository": identity.repository,
+        "revision": identity.revision,
+    }
+    assert payload["changed_file_count"] == 1
+    assert payload["base_results"][0]["origin"] == "base"
+    assert payload["base_results"][0]["change"] == "unchanged"
+    assert payload["delta_results"][0]["origin"] == "delta"
+    assert payload["delta_results"][0]["change"] == "modified"
+    assert "content" not in payload["base_results"][0]
+    session.index.search.assert_called_once_with("changed behavior", scope=SearchScope.WORKSPACE, top_k=5)
+
+
+@pytest.mark.anyio
+async def test_workspace_changes_tool_lists_authoritative_path_states(cache: _IndexCache, tmp_path: Path) -> None:
+    """workspace_changes exposes sorted Git-derived delta membership without searching."""
+    identity = BaselineIdentity("example/repository", "c" * 40)
+    session = MagicMock()
+    session.index.identity = identity
+    session.index.changed_paths = {
+        "z_deleted.py": ChangeKind.DELETED,
+        "a_modified.py": ChangeKind.MODIFIED,
+    }
+    workspace_cache = MagicMock()
+    workspace_cache.get = AsyncMock(return_value=session)
+    server = create_server(cache, workspace_cache=workspace_cache)
+    result = await server.call_tool(
+        "workspace_changes",
+        {
+            "repo": str(tmp_path / "worktree"),
+            "baseline_repo": str(tmp_path / "baseline"),
+            "repository": identity.repository,
+            "base_revision": identity.revision,
+        },
+    )
+    payload = json.loads(_tool_text(result))
+    assert payload == {
+        "baseline": {
+            "repository": identity.repository,
+            "revision": identity.revision,
+        },
+        "changed_file_count": 2,
+        "changes": [
+            {"file_path": "a_modified.py", "change": "modified"},
+            {"file_path": "z_deleted.py", "change": "deleted"},
+        ],
+    }
+
+
+@pytest.mark.anyio
+async def test_workspace_release_tool_closes_private_sessions(cache: _IndexCache, tmp_path: Path) -> None:
+    """workspace_release forwards the canonical worktree lifecycle boundary."""
+    workspace_cache = MagicMock()
+    workspace_cache.release_workspace = AsyncMock(return_value=2)
+    server = create_server(cache, workspace_cache=workspace_cache)
+    repo = tmp_path / "worktree"
+    result = await server.call_tool("workspace_release", {"repo": str(repo)})
+    assert json.loads(_tool_text(result)) == {
+        "workspace": str(repo.resolve()),
+        "released_sessions": 2,
+    }
+    workspace_cache.release_workspace.assert_awaited_once_with(str(repo))
+
+
+@pytest.mark.anyio
+async def test_workspace_cache_reuses_and_releases_exact_session(cache: _IndexCache, tmp_path: Path) -> None:
+    """An exact workspace contract opens once and release closes its layered session."""
+    workspace_cache = _WorkspaceCache(cache)
+    session = MagicMock()
+    session.close = AsyncMock()
+    identity = BaselineIdentity("example/repository", "b" * 40)
+    repo = str(tmp_path / "worktree")
+    baseline = str(tmp_path / "baseline")
+    with patch("semble.mcp.open_git_workspace", return_value=session) as mock_open:
+        first = await workspace_cache.get(
+            repo=repo,
+            baseline_repo=baseline,
+            identity=identity,
+            content=(ContentType.CODE,),
+        )
+        second = await workspace_cache.get(
+            repo=repo,
+            baseline_repo=baseline,
+            identity=identity,
+            content=(ContentType.CODE,),
+        )
+    assert first is second is session
+    mock_open.assert_called_once()
+    session.start.assert_called_once()
+    assert await workspace_cache.release_workspace(repo) == 1
+    session.close.assert_awaited_once()
+    assert await workspace_cache.release_workspace(repo) == 0
 
 
 @pytest.mark.anyio

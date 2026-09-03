@@ -53,44 +53,47 @@ class SelectableBasicBackend(CosineBasicBackend):
         sim = x_norm.dot(self._vectors[selector].T)
         return 1 - sim
 
-    def query(self, vectors: npt.NDArray, k: int, selector: npt.NDArray[np.int_] | None = None) -> QueryResult:
-        """Batched distance query.
-
-        :param vectors: The vectors to query.
-        :param k: The number of nearest neighbors to return.
-        :param selector: Optional array of chunk indices to filter results by.
-        :return: A list of tuples with the indices and distances.
-        :raises ValueError: If k is less than 1.
-        """
+    def query(
+        self,
+        vectors: npt.NDArray,
+        k: int,
+        selector: npt.NDArray[np.int_] | None = None,
+        excluded: npt.NDArray[np.int_] | None = None,
+    ) -> QueryResult:
+        """Batched distance query with optional inclusion or exclusion indices."""
         if k < 1:
             raise ValueError(f"k should be >= 1, is now {k}")
+        if selector is not None and excluded is not None:
+            raise ValueError("selector and excluded cannot be combined")
+
+        num_vectors = len(self.vectors)
+        available = len(selector) if selector is not None else num_vectors
+        if excluded is not None:
+            available -= len(excluded)
+        effective_k = min(k, available)
+        if effective_k <= 0:
+            return [(np.empty(0, dtype=np.int_), np.empty(0, dtype=np.float32)) for _vector in vectors]
 
         out: QueryResult = []
-        num_vectors = len(self.vectors)
-        effective_k = min(k, num_vectors)
-        if selector is not None:
-            effective_k = min(effective_k, len(selector))
-
-        # Batch the queries
         for index in range(0, len(vectors), 1024):
             batch = vectors[index : index + 1024]
             if selector is not None:
                 distances = self._selector_dist(batch, selector)
             else:
                 distances = self._dist(batch)
+                if excluded is not None and len(excluded) > 0:
+                    distances[:, excluded] = np.inf
 
-            # Efficiently get the k smallest distances
             indices = np.argpartition(distances, kth=effective_k - 1, axis=1)[:, :effective_k]
             sorted_indices = np.take_along_axis(
-                indices, np.argsort(np.take_along_axis(distances, indices, axis=1)), axis=1
+                indices,
+                np.argsort(np.take_along_axis(distances, indices, axis=1)),
+                axis=1,
             )
             sorted_distances = np.take_along_axis(distances, sorted_indices, axis=1)
-
-            # Extend the output with tuples of (indices, distances)
             if selector is not None:
                 sorted_indices = selector[sorted_indices]
             out.extend(zip(sorted_indices, sorted_distances))
-
         return out
 
     def save(self, path: Path) -> None:

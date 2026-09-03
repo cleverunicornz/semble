@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-27T09:25:58.507506Z"
+exclude-newer = "2026-08-27T11:04:51.465373Z"
 exclude-newer-span = "P1W"
 
 [options.exclude-newer-package]
@@ -3141,6 +3141,7 @@ dependencies = [
     { name = "questionary" },
     { name = "semble-grammars" },
     { name = "vicinity" },
+    { name = "watchfiles" },
 ]
 
 [package.optional-dependencies]
@@ -3163,7 +3164,6 @@ dev = [
 ]
 mcp = [
     { name = "mcp" },
-    { name = "watchfiles" },
 ]
 
 [package.metadata]
@@ -3188,7 +3188,7 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'benchmark'", specifier = ">=3.0" },
     { name = "tiktoken", marker = "extra == 'benchmark'", specifier = ">=0.7" },
     { name = "vicinity", specifier = ">=0.4.4" },
-    { name = "watchfiles", marker = "extra == 'mcp'", specifier = ">=1.0,<2.0" },
+    { name = "watchfiles", specifier = ">=1.0,<2.0" },
 ]
 provides-extras = ["mcp", "benchmark", "dev"]
 

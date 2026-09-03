@@ -13,11 +13,19 @@ from pydantic import Field
 from watchfiles import awatch
 
 from semble.cache import resolve_cache_folder, save_index_to_cache
+from semble.git_workspace import GitWorkspaceSession, open_git_workspace
 from semble.index import SembleIndex
 from semble.index.dense import load_model
 from semble.index.files import get_extensions
 from semble.types import ContentType
 from semble.utils import format_results, is_git_url, resolve_chunk
+from semble.workspace import (
+    BaselineIdentity,
+    BaselineRegistry,
+    SearchScope,
+    WorkspaceSearchHit,
+    WorkspaceSearchResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +38,9 @@ _CACHE_MAX_SIZE = 10  # Max number of cached indexes to keep in memory
 _WATCH_DEBOUNCE_MS = 200
 _INDEX_RULE_FILES = frozenset({".gitignore", ".sembleignore"})
 ContentSelection = Literal["code", "docs", "config", "all"]
+WorkspaceScopeSelection = Literal["workspace", "changed", "unchanged", "base"]
 _CacheKey = tuple[str, tuple[ContentType, ...]]
+_WorkspaceKey = tuple[str, str, BaselineIdentity, tuple[ContentType, ...]]
 
 
 async def _get_index(repo: str, cache: _IndexCache, content: Sequence[ContentType]) -> SembleIndex:
@@ -54,8 +64,139 @@ def _resolve_content_selection(
     return (ContentType(content),)
 
 
-def create_server(cache: _IndexCache, default_content: Sequence[ContentType] = (ContentType.CODE,)) -> FastMCP:
-    """Build and return a configured FastMCP server backed by the given cache."""
+def _format_workspace_hit(hit: WorkspaceSearchHit, max_snippet_lines: int | None) -> dict[str, object]:
+    """Format one provenance-bearing hit with bounded source content."""
+    chunk = hit.result.chunk
+    payload: dict[str, object] = {
+        "file_path": chunk.file_path,
+        "start_line": chunk.start_line,
+        "end_line": chunk.end_line,
+        "score": hit.result.score,
+        "origin": hit.origin.value,
+        "change": hit.change.value,
+    }
+    if max_snippet_lines != 0:
+        payload["content"] = (
+            chunk.content if max_snippet_lines is None else "\n".join(chunk.content.splitlines()[:max_snippet_lines])
+        )
+    return payload
+
+
+def _format_workspace_response(
+    response: WorkspaceSearchResponse,
+    max_snippet_lines: int | None,
+) -> dict[str, object]:
+    """Limit workspace-result content for the MCP response."""
+    return {
+        "baseline": {
+            "repository": response.baseline.repository,
+            "revision": response.baseline.revision,
+        },
+        "scope": response.scope.value,
+        "changed_file_count": response.changed_file_count,
+        "base_results": [_format_workspace_hit(result, max_snippet_lines) for result in response.base_results],
+        "delta_results": [_format_workspace_hit(result, max_snippet_lines) for result in response.delta_results],
+    }
+
+
+def _register_workspace_tools(
+    server: FastMCP,
+    workspace_cache: _WorkspaceCache,
+    default_content: Sequence[ContentType],
+) -> None:
+    """Register Git-pinned workspace search and provenance tools."""
+
+    @server.tool()
+    async def workspace_search(
+        query: Annotated[str, Field(description="Natural language or code query.")],
+        repo: Annotated[str, Field(description="Current Git worktree root.")],
+        baseline_repo: Annotated[str, Field(description="Clean checkout rooted at the pinned baseline commit.")],
+        repository: Annotated[str, Field(description="Stable repository identity shared by compatible baselines.")],
+        base_revision: Annotated[str, Field(description="Immutable Git commit used to create the worktree.")],
+        scope: Annotated[
+            WorkspaceScopeSelection,
+            Field(description="Search the effective workspace, changed files, unchanged files, or raw base."),
+        ] = "workspace",
+        top_k: Annotated[int, Field(description="Results to return per physical index facet.", ge=1)] = 5,
+        max_snippet_lines: Annotated[
+            int | None,
+            Field(description="Lines of source per result. 0 omits content; None returns complete chunks.", ge=0),
+        ] = 10,
+        content: Annotated[
+            ContentSelection | None,
+            Field(description="Content to search. Defaults to the MCP server's configured content."),
+        ] = None,
+    ) -> str:
+        """Search a Git-pinned baseline and private worktree delta with explicit provenance."""
+        selected_content = _resolve_content_selection(content, default_content)
+        try:
+            session = await workspace_cache.get(
+                repo=repo,
+                baseline_repo=baseline_repo,
+                identity=BaselineIdentity(repository, base_revision),
+                content=selected_content,
+            )
+            response = await asyncio.to_thread(
+                session.index.search,
+                query,
+                scope=SearchScope(scope),
+                top_k=top_k,
+            )
+        except Exception as exc:
+            return f"Failed to search workspace {repo!r}: {exc}"
+        return json.dumps(_format_workspace_response(response, max_snippet_lines))
+
+    @server.tool()
+    async def workspace_changes(
+        repo: Annotated[str, Field(description="Current Git worktree root.")],
+        baseline_repo: Annotated[str, Field(description="Clean checkout rooted at the pinned baseline commit.")],
+        repository: Annotated[str, Field(description="Stable repository identity shared by compatible baselines.")],
+        base_revision: Annotated[str, Field(description="Immutable Git commit used to create the worktree.")],
+        content: Annotated[
+            ContentSelection | None,
+            Field(description="Content variant whose live workspace session should be inspected."),
+        ] = None,
+    ) -> str:
+        """List every current path state relative to the worktree's immutable baseline."""
+        selected_content = _resolve_content_selection(content, default_content)
+        try:
+            session = await workspace_cache.get(
+                repo=repo,
+                baseline_repo=baseline_repo,
+                identity=BaselineIdentity(repository, base_revision),
+                content=selected_content,
+            )
+        except Exception as exc:
+            return f"Failed to inspect workspace {repo!r}: {exc}"
+        changes = session.index.changed_paths
+        return json.dumps(
+            {
+                "baseline": {
+                    "repository": session.index.identity.repository,
+                    "revision": session.index.identity.revision,
+                },
+                "changed_file_count": len(changes),
+                "changes": [{"file_path": path, "change": change.value} for path, change in sorted(changes.items())],
+            }
+        )
+
+    @server.tool()
+    async def workspace_release(
+        repo: Annotated[str, Field(description="Git worktree root whose live layered sessions should be released.")],
+    ) -> str:
+        """Release a worktree's private overlays without deleting source or baseline caches."""
+        released = await workspace_cache.release_workspace(repo)
+        return json.dumps({"workspace": str(Path(repo).resolve()), "released_sessions": released})
+
+
+def create_server(
+    cache: _IndexCache,
+    default_content: Sequence[ContentType] = (ContentType.CODE,),
+    *,
+    workspace_cache: _WorkspaceCache | None = None,
+) -> FastMCP:
+    """Build and return a configured FastMCP server backed by the given caches."""
+    workspace_cache = workspace_cache or _WorkspaceCache(cache)
     server = FastMCP(
         "semble",
         instructions=(
@@ -154,6 +295,8 @@ def create_server(cache: _IndexCache, default_content: Sequence[ContentType] = (
         label = f"Chunks related to {file_path}:{line}"
         return json.dumps(format_results(label, results, max_snippet_lines))
 
+    _register_workspace_tools(server, workspace_cache, default_content)
+
     return server
 
 
@@ -162,6 +305,7 @@ async def serve(
 ) -> None:
     """Start an MCP stdio server."""
     cache = _IndexCache()
+    workspace_cache = _WorkspaceCache(cache)
 
     async def _load_and_prewarm() -> None:
         """Pre-load the embedding model in parallel with starting the server."""
@@ -175,10 +319,11 @@ async def serve(
             cache._model_ready.set()
 
     init_task = asyncio.create_task(_load_and_prewarm())
-    server = create_server(cache, default_content=content)
+    server = create_server(cache, default_content=content, workspace_cache=workspace_cache)
     try:
         await server.run_stdio_async()
     finally:
+        await workspace_cache.close()
         await cache.close()
         if not init_task.done():
             init_task.cancel()
@@ -330,9 +475,7 @@ class _IndexCache:
                 if len(self._tasks) >= _CACHE_MAX_SIZE:
                     self.evict(next(iter(self._tasks)))
                 self._dirty.discard(cache_key)
-                self._tasks[cache_key] = asyncio.create_task(
-                    self._build_tracked(source, ref, model_path, cache_key)
-                )
+                self._tasks[cache_key] = asyncio.create_task(self._build_tracked(source, ref, model_path, cache_key))
         self._tasks.move_to_end(cache_key)
         return self._tasks[cache_key]
 
@@ -371,3 +514,98 @@ class _IndexCache:
             index = await self._await_index(cache_key, await self._task_for(source, ref, cache_key))
             if not local or cache_key not in self._dirty:
                 return index
+
+
+class _WorkspaceCache:
+    """LRU cache of live Git workspace sessions sharing immutable baselines."""
+
+    def __init__(self, index_cache: _IndexCache) -> None:
+        """Create an empty workspace cache sharing the MCP model lifecycle."""
+        self._index_cache = index_cache
+        self._baselines = BaselineRegistry()
+        self._tasks: OrderedDict[_WorkspaceKey, asyncio.Task[GitWorkspaceSession]] = OrderedDict()
+        self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _key(
+        repo: str,
+        baseline_repo: str,
+        identity: BaselineIdentity,
+        content: Sequence[ContentType],
+    ) -> _WorkspaceKey:
+        return (
+            str(Path(repo).resolve()),
+            str(Path(baseline_repo).resolve()),
+            identity,
+            tuple(content_type for content_type in ContentType if content_type in content),
+        )
+
+    async def _open(
+        self,
+        key: _WorkspaceKey,
+    ) -> GitWorkspaceSession:
+        repo, baseline_repo, identity, content = key
+        model_path = await self._index_cache._await_model()
+        session = await asyncio.to_thread(
+            open_git_workspace,
+            self._baselines,
+            identity,
+            baseline_root=baseline_repo,
+            workspace_root=repo,
+            content=content,
+            model_path=model_path,
+        )
+        session.start()
+        return session
+
+    async def get(
+        self,
+        *,
+        repo: str,
+        baseline_repo: str,
+        identity: BaselineIdentity,
+        content: Sequence[ContentType],
+    ) -> GitWorkspaceSession:
+        """Return one live layered session for an exact workspace contract."""
+        key = self._key(repo, baseline_repo, identity, content)
+        async with self._lock:
+            if key not in self._tasks:
+                if len(self._tasks) >= _CACHE_MAX_SIZE:
+                    _evicted_key, evicted = self._tasks.popitem(last=False)
+                    await self._close_task(evicted)
+                self._tasks[key] = asyncio.create_task(self._open(key))
+            self._tasks.move_to_end(key)
+            task = self._tasks[key]
+        try:
+            return await asyncio.shield(task)
+        except Exception:
+            async with self._lock:
+                if self._tasks.get(key) is task:
+                    self._tasks.pop(key, None)
+            raise
+
+    async def release_workspace(self, repo: str) -> int:
+        """Release every exact session attached to one canonical worktree path."""
+        canonical = str(Path(repo).resolve())
+        async with self._lock:
+            selected = [key for key in self._tasks if key[0] == canonical]
+            tasks = [self._tasks.pop(key) for key in selected]
+        for task in tasks:
+            await self._close_task(task)
+        return len(tasks)
+
+    async def _close_task(self, task: asyncio.Task[GitWorkspaceSession]) -> None:
+        try:
+            session = await asyncio.shield(task)
+        except Exception:
+            return
+        await session.close()
+        self._baselines.evict_unused()
+
+    async def close(self) -> None:
+        """Close every workspace overlay and release all baseline references."""
+        async with self._lock:
+            tasks = list(self._tasks.values())
+            self._tasks.clear()
+        for task in tasks:
+            await self._close_task(task)

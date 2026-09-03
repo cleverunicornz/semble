@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import warnings
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -20,7 +20,7 @@ from semble.index.create import create_index_from_path
 from semble.index.dense import SelectableBasicBackend, load_model
 from semble.index.files import read_file_text
 from semble.index.types import CACHE_FORMAT_VERSION, FileManifestEntry, PersistencePath
-from semble.search import _search_semantic, search
+from semble.search import PreparedQuery, _search_semantic, prepare_query, search_prepared
 from semble.stats import save_search_stats
 from semble.types import CallType, Chunk, ContentType, IndexStats, SearchResult
 
@@ -128,6 +128,11 @@ class SembleIndex:
     def content(self) -> tuple[ContentType, ...]:
         """Return the content types covered by this index."""
         return self._content
+
+    @property
+    def file_paths(self) -> frozenset[str]:
+        """Return every file path represented by this immutable index snapshot."""
+        return frozenset(self._file_mapping)
 
     @classmethod
     def from_path(
@@ -266,6 +271,42 @@ class SembleIndex:
 
         return np.unique(selector) if selector else None
 
+    def indices_for_paths(self, paths: Collection[str]) -> npt.NDArray[np.int_] | None:
+        """Return unique chunk indices belonging to the supplied file paths."""
+        indices = {index for filename in paths for index in self._file_mapping.get(filename, ())}
+        return np.array(sorted(indices), dtype=np.int_) if indices else None
+
+    def prepare_query(self, query: str, alpha: float | None = None) -> PreparedQuery:
+        """Prepare one query for reuse against this index and compatible overlays."""
+        return prepare_query(query, self.model, alpha)
+
+    def search_prepared(
+        self,
+        prepared: PreparedQuery,
+        top_k: int = 10,
+        *,
+        selector: npt.NDArray[np.int_] | None = None,
+        excluded: npt.NDArray[np.int_] | None = None,
+        rerank: bool | None = None,
+        record_stats: bool = True,
+        max_snippet_lines: int | None = None,
+    ) -> list[SearchResult]:
+        """Search with an already-prepared query representation."""
+        resolved_rerank = (ContentType.CODE in self._content) if rerank is None else rerank
+        results = search_prepared(
+            prepared,
+            self._semantic_index,
+            self._bm25_index,
+            self.chunks,
+            top_k,
+            selector=selector,
+            excluded=excluded,
+            rerank=resolved_rerank,
+        )
+        if record_stats:
+            save_search_stats(results, CallType.SEARCH, self._file_sizes, max_snippet_lines)
+        return results
+
     def search(
         self,
         query: str,
@@ -294,22 +335,15 @@ class SembleIndex:
         if not self.chunks or not query.strip():
             return []
 
-        resolved_rerank = (ContentType.CODE in self._content) if rerank is None else rerank
-
+        prepared = self.prepare_query(query, alpha)
         selector = self._get_selector_vector(filter_languages, filter_paths)
-        results = search(
-            query,
-            self.model,
-            self._semantic_index,
-            self._bm25_index,
-            self.chunks,
+        return self.search_prepared(
+            prepared,
             top_k,
-            alpha=alpha,
             selector=selector,
-            rerank=resolved_rerank,
+            rerank=rerank,
+            max_snippet_lines=max_snippet_lines,
         )
-        save_search_stats(results, CallType.SEARCH, self._file_sizes, max_snippet_lines)
-        return results
 
     @classmethod
     def load_from_disk(cls: type[SembleIndex], path: Path | str) -> SembleIndex:
