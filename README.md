@@ -265,7 +265,7 @@ After fusing, results are reranked with a set of code-aware signals:
 
 Because the embedding model is static with no transformer forward pass at query time, all of this runs in milliseconds on CPU.
 
-Indexes are cached to disk automatically on the first search. On subsequent runs, Semble walks the file tree and compares modification times; added, removed, or changed files are reindexed incrementally, without rebuilding the rest of the index. A full rebuild only happens if the indexing settings change (e.g., after a semble upgrade that changes the model, chunking, or cache format). In MCP mode, the index is checked and refreshed automatically as files change, so results stay current across the session.
+Indexes are cached to disk automatically on the first search. On subsequent CLI runs, Semble walks the file tree and compares modification times; added, removed, or changed files are reindexed incrementally without re-embedding unchanged files. In MCP mode, local repositories use a debounced filesystem watcher instead: a relevant source or ignore-rule change invalidates the affected in-memory content index immediately, and the next tool call waits for one shared incremental refresh before searching. Remote Git URLs remain immutable for the MCP server session. A full rebuild only happens when indexing settings change, such as after a Semble upgrade that changes the model, chunking, or cache format.
 
 ### Using a custom model
 

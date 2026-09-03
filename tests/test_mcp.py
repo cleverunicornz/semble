@@ -1,13 +1,13 @@
 import asyncio
 import json
 import threading
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from model2vec import StaticModel
+from watchfiles import Change
 
 from semble.mcp import _CACHE_MAX_SIZE, _IndexCache, create_server, serve
 from semble.types import Chunk, ContentType, SearchResult
@@ -43,7 +43,7 @@ async def _call_tool(
 @pytest.fixture()
 def cache() -> _IndexCache:
     """An _IndexCache backed by a stub model."""
-    c = _IndexCache()
+    c = _IndexCache(watch=False)
     c._model_path = "/fake/model"
     c._model_ready.set()
     return c
@@ -141,7 +141,6 @@ async def test_index_cache_builds_and_caches(
     with (
         patch(f"semble.mcp.SembleIndex.{patch_target}", return_value=fake_index) as mock_build,
         patch("semble.mcp.save_index_to_cache") as mock_save,
-        patch("semble.mcp.get_validated_cache", return_value=Path("/fake/cache")),
     ):
         first = await cache.get(resolved_source)
         second = await cache.get(resolved_source)
@@ -159,88 +158,111 @@ async def test_index_cache_builds_and_caches(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    ("source", "patch_target", "expected_build_calls", "validate_called"),
-    [
-        ("local_tmp_path", "from_path", 2, True),
-        ("https://github.com/org/repo", "from_git", 1, False),
-    ],
-    ids=["local_path_rebuilds_when_stale", "git_url_skips_revalidation"],
-)
-async def test_index_cache_staleness_check_scope(
-    cache: _IndexCache,
-    tmp_path: Path,
-    source: str,
-    patch_target: str,
-    expected_build_calls: int,
-    validate_called: bool,
-) -> None:
-    """Local paths are revalidated (and rebuilt when stale) on every get(); git URLs never are."""
-    resolved_source = str(tmp_path) if source == "local_tmp_path" else source
+async def test_index_cache_rebuilds_dirty_local_path(cache: _IndexCache, tmp_path: Path) -> None:
+    """A relevant local file event invalidates the resident index immediately."""
+    first_index = MagicMock()
+    second_index = MagicMock()
+    source = str(tmp_path.resolve())
     with (
-        patch(f"semble.mcp.SembleIndex.{patch_target}", return_value=MagicMock()) as mock_build,
-        patch("semble.mcp.save_index_to_cache"),
-        patch("semble.mcp.get_validated_cache", return_value=None) as mock_validate,
-        # Disable the cooldown: real build duration (here, just thread-dispatch overhead) would
-        # otherwise sometimes exceed the gap between the two get() calls below, flaking the test.
-        patch("semble.mcp._MIN_REVALIDATE_FACTOR", 0),
+        patch("semble.mcp.SembleIndex.from_path", side_effect=[first_index, second_index]) as mock_build,
+        patch("semble.mcp.save_index_to_cache") as mock_save,
     ):
-        await cache.get(resolved_source)
-        await cache.get(resolved_source)
-    assert mock_build.call_count == expected_build_calls
-    assert mock_validate.called is validate_called
+        assert await cache.get(source) is first_index
+        cache._mark_dirty(source, {tmp_path / "changed.py"})
+        assert await cache.get(source) is second_index
+    assert mock_build.call_count == 2
+    assert mock_save.call_count == 2
 
 
 @pytest.mark.anyio
-async def test_index_cache_skips_staleness_check_during_cooldown(cache: _IndexCache, tmp_path: Path) -> None:
-    """A slow-to-build local path is not revalidated again until its cooldown elapses."""
-    cache_key = cache._compute_cache_key(str(tmp_path))
-    cache._tasks[cache_key] = asyncio.create_task(_succeed())
-    await asyncio.sleep(0)  # let the task finish
-    cache._revalidate_after[cache_key] = time.monotonic() + 30.0  # a build that took 10s, just finished
-    with patch("semble.mcp.get_validated_cache") as mock_validate:
-        await cache._evict_if_stale(cache_key)
-    mock_validate.assert_not_called()
+async def test_index_cache_scopes_file_events_to_affected_content(cache: _IndexCache, tmp_path: Path) -> None:
+    """Source extensions invalidate matching variants; ignore-rule changes invalidate all variants."""
+    source = str(tmp_path.resolve())
+    with (
+        patch("semble.mcp.SembleIndex.from_path", return_value=MagicMock()),
+        patch("semble.mcp.save_index_to_cache"),
+    ):
+        await cache.get(source)
+        await cache.get(source, content=(ContentType.DOCS,))
 
+    code_key = cache._compute_cache_key(source)
+    docs_key = cache._compute_cache_key(source, content=(ContentType.DOCS,))
+    cache._mark_dirty(source, {tmp_path / "changed.py"})
+    assert code_key in cache._dirty
+    assert docs_key not in cache._dirty
 
-async def _succeed() -> MagicMock:
-    return MagicMock()
-
-
-@pytest.mark.anyio
-async def test_index_cache_skips_staleness_check_for_failed_task(cache: _IndexCache, tmp_path: Path) -> None:
-    """A cached entry that finished with an exception is not revalidated; it is left for the normal retry path."""
-
-    async def _raise() -> MagicMock:
-        raise RuntimeError("boom")
-
-    cache_key = cache._compute_cache_key(str(tmp_path))
-    cache._tasks[cache_key] = asyncio.create_task(_raise())
-    await asyncio.sleep(0)  # let the task finish
-    with patch("semble.mcp.get_validated_cache") as mock_validate:
-        await cache._evict_if_stale(cache_key)
-    mock_validate.assert_not_called()
+    cache._mark_dirty(source, {tmp_path / ".gitignore"})
+    assert code_key in cache._dirty
+    assert docs_key in cache._dirty
 
 
 @pytest.mark.anyio
-async def test_index_cache_does_not_evict_entry_replaced_during_validation(cache: _IndexCache, tmp_path: Path) -> None:
-    """If a concurrent caller already replaced a stale entry, _evict_if_stale must not evict the new one."""
-    cache_key = cache._compute_cache_key(str(tmp_path))
-    cache._tasks[cache_key] = asyncio.create_task(_succeed())
-    await asyncio.sleep(0)
-    cache._revalidate_after[cache_key] = 0.0  # cooldown already elapsed
+async def test_index_cache_reconciles_change_during_build(cache: _IndexCache, tmp_path: Path) -> None:
+    """A file event arriving during a build forces one shared follow-up reconciliation."""
+    build_started = threading.Event()
+    release_build = threading.Event()
+    first_index = MagicMock()
+    second_index = MagicMock()
+    calls = 0
 
-    replacement_task = object()
+    def build(_path: str, **_kwargs: object) -> MagicMock:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            build_started.set()
+            assert release_build.wait(timeout=2.0)
+            return first_index
+        return second_index
 
-    def _replace_entry_then_report_stale(*args: object, **kwargs: object) -> None:
-        # Simulate a concurrent get() winning the race and installing a fresh task first.
-        cache._tasks[cache_key] = replacement_task  # type: ignore[assignment]
-        return None
+    source = str(tmp_path.resolve())
+    with (
+        patch("semble.mcp.SembleIndex.from_path", side_effect=build),
+        patch("semble.mcp.save_index_to_cache"),
+    ):
+        request = asyncio.create_task(cache.get(source))
+        assert await asyncio.to_thread(build_started.wait, 1.0)
+        cache._mark_dirty(source, {tmp_path / "changed.py"})
+        release_build.set()
+        assert await asyncio.wait_for(request, timeout=2.0) is second_index
+    assert calls == 2
 
-    with patch("semble.mcp.get_validated_cache", side_effect=_replace_entry_then_report_stale):
-        await cache._evict_if_stale(cache_key)
-    assert cache._tasks.get(cache_key) is replacement_task
 
+@pytest.mark.parametrize("change", list(Change))
+@pytest.mark.anyio
+async def test_index_cache_watcher_marks_changes_and_closes(change: Change, tmp_path: Path) -> None:
+    """The local watcher marks relevant indexes dirty and is cancelled during cache shutdown."""
+    source = str(tmp_path.resolve())
+    watcher_started = asyncio.Event()
+    events: asyncio.Queue[set[tuple[Change, str]]] = asyncio.Queue()
+
+    async def fake_awatch(*_paths: str, **_kwargs: object):  # type: ignore[no-untyped-def]
+        watcher_started.set()
+        yield await events.get()
+        await asyncio.Future()
+
+    async def wait_until_dirty(cache: _IndexCache, key: object) -> None:
+        while key not in cache._dirty:
+            await asyncio.sleep(0)
+
+    with (
+        patch("semble.mcp.resolve_cache_folder", return_value=tmp_path / "cache"),
+        patch("semble.mcp.awatch", new=fake_awatch),
+        patch("semble.mcp.SembleIndex.from_path", return_value=MagicMock()),
+        patch("semble.mcp.save_index_to_cache"),
+    ):
+        cache = _IndexCache()
+        cache._model_path = "/fake/model"
+        cache._model_ready.set()
+        await cache.get(source)
+        await asyncio.wait_for(watcher_started.wait(), timeout=1.0)
+        key = cache._compute_cache_key(source)
+        watcher = cache._watch_tasks[source]
+        await events.put({(change, str(tmp_path / "changed.py"))})
+        await asyncio.wait_for(wait_until_dirty(cache, key), timeout=1.0)
+        await cache.close()
+
+    assert not cache._watch_tasks
+    assert watcher.cancelled()
 
 @pytest.mark.anyio
 async def test_index_cache_evicts_on_failure(cache: _IndexCache, tmp_path: Path) -> None:

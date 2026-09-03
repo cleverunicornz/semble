@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import time
 from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,10 +10,12 @@ from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
+from watchfiles import awatch
 
-from semble.cache import get_validated_cache, save_index_to_cache
+from semble.cache import resolve_cache_folder, save_index_to_cache
 from semble.index import SembleIndex
 from semble.index.dense import load_model
+from semble.index.files import get_extensions
 from semble.types import ContentType
 from semble.utils import format_results, is_git_url, resolve_chunk
 
@@ -26,7 +27,8 @@ _REPO_DESCRIPTION = (
 )
 
 _CACHE_MAX_SIZE = 10  # Max number of cached indexes to keep in memory
-_MIN_REVALIDATE_FACTOR = 3  # Don't recheck staleness sooner than this many times the last build's duration
+_WATCH_DEBOUNCE_MS = 200
+_INDEX_RULE_FILES = frozenset({".gitignore", ".sembleignore"})
 ContentSelection = Literal["code", "docs", "config", "all"]
 _CacheKey = tuple[str, tuple[ContentType, ...]]
 
@@ -177,20 +179,31 @@ async def serve(
     try:
         await server.run_stdio_async()
     finally:
+        await cache.close()
         if not init_task.done():
             init_task.cancel()
+        await asyncio.gather(init_task, return_exceptions=True)
 
 
 class _IndexCache:
-    """Cache of indexed repos and local paths for the lifetime of the MCP server process."""
+    """Cache indexed repositories and watch local paths for filesystem changes."""
 
-    def __init__(self) -> None:
-        """Initialise an empty cache."""
+    def __init__(self, *, watch: bool = True) -> None:
+        """Initialise an empty cache.
+
+        :param watch: Watch local source paths and invalidate affected indexes.
+            Tests that exercise cache mechanics without filesystem events may
+            disable watching explicitly.
+        """
         self._model_path: str | None = None
         self._model_error: BaseException | None = None
         self._model_ready = asyncio.Event()
-        self._tasks: OrderedDict[_CacheKey, asyncio.Task[SembleIndex]] = OrderedDict()  # ordered for LRU eviction
-        self._revalidate_after: dict[_CacheKey, float] = {}
+        self._tasks: OrderedDict[_CacheKey, asyncio.Task[SembleIndex]] = OrderedDict()
+        self._dirty: set[_CacheKey] = set()
+        self._watch_enabled = watch
+        self._watch_tasks: dict[str, asyncio.Task[None]] = {}
+        self._cache_root = resolve_cache_folder().resolve() if watch else None
+        self._closed = False
 
     async def _await_model(self) -> str:
         """Block until the model is installed; re-raise the load error if it failed."""
@@ -226,45 +239,119 @@ class _IndexCache:
             logger.warning("Failed to save index cache for %r", source_key, exc_info=True)
         return index
 
-    async def _build_tracked(self, source: str, ref: str | None, model_path: str, cache_key: _CacheKey) -> SembleIndex:
-        """Build an index and, for local paths, record when its staleness cooldown ends.
+    async def _build_tracked(
+        self,
+        source: str,
+        ref: str | None,
+        model_path: str,
+        cache_key: _CacheKey,
+    ) -> SembleIndex:
+        """Build an index without blocking the MCP event loop."""
+        return await asyncio.to_thread(self._build_index, source, ref, model_path, cache_key)
 
-        The cooldown write happens after the await, i.e. back on the event loop thread,
-        regardless of which thread `_build_index` itself ran on.
-        """
-        start = time.monotonic()
-        index = await asyncio.to_thread(self._build_index, source, ref, model_path, cache_key)
-        if not is_git_url(source):
-            finished = time.monotonic()
-            self._revalidate_after[cache_key] = finished + (finished - start) * _MIN_REVALIDATE_FACTOR
-        return index
+    @staticmethod
+    def _change_affects_content(path: Path, content: Sequence[ContentType]) -> bool:
+        """Return whether one changed path can affect an exact content index."""
+        return path.name in _INDEX_RULE_FILES or path.suffix.lower() in get_extensions(content)
 
-    def evict(self, cache_key: _CacheKey) -> None:
-        """Evict one exact index variant from memory."""
+    def _mark_dirty(self, source_key: str, paths: set[Path] | None = None) -> None:
+        """Mark loaded variants for one local source stale."""
+        for cache_key in tuple(self._tasks):
+            if cache_key[0] != source_key:
+                continue
+            if paths is None or any(self._change_affects_content(path, cache_key[1]) for path in paths):
+                self._dirty.add(cache_key)
+
+    async def _watch_source(self, source_key: str) -> None:
+        """Watch one local source path and invalidate affected in-memory indexes."""
+        current = asyncio.current_task()
+        try:
+            async for changes in awatch(source_key, debounce=_WATCH_DEBOUNCE_MS, step=50):
+                paths = {
+                    Path(path).resolve()
+                    for _change, path in changes
+                    if self._cache_root is None or not Path(path).resolve().is_relative_to(self._cache_root)
+                }
+                if paths:
+                    self._mark_dirty(source_key, paths)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Filesystem watcher failed for %r; forcing revalidation", source_key, exc_info=True)
+            self._mark_dirty(source_key)
+        finally:
+            if self._watch_tasks.get(source_key) is current:
+                self._watch_tasks.pop(source_key, None)
+
+    def _ensure_watcher(self, source_key: str) -> None:
+        """Start one shared watcher for a local source path."""
+        if not self._watch_enabled or self._closed or source_key in self._watch_tasks:
+            return
+        self._watch_tasks[source_key] = asyncio.create_task(
+            self._watch_source(source_key),
+            name=f"semble-watch:{source_key}",
+        )
+
+    def _stop_watcher_if_unused(self, source_key: str) -> None:
+        """Stop a source watcher after its final exact index variant is evicted."""
+        if any(cache_key[0] == source_key for cache_key in self._tasks):
+            return
+        watcher = self._watch_tasks.pop(source_key, None)
+        if watcher is not None:
+            watcher.cancel()
+
+    def evict(self, cache_key: _CacheKey, *, keep_watcher: bool = False) -> None:
+        """Evict one exact index variant."""
         self._tasks.pop(cache_key, None)
-        self._revalidate_after.pop(cache_key, None)
+        self._dirty.discard(cache_key)
+        if not keep_watcher:
+            self._stop_watcher_if_unused(cache_key[0])
 
-    async def _evict_if_stale(self, cache_key: _CacheKey) -> None:
-        """Evict a cached local-path entry whose on-disk cache no longer matches its files.
+    async def close(self) -> None:
+        """Stop every local filesystem watcher owned by this cache."""
+        self._closed = True
+        watchers = list(self._watch_tasks.values())
+        self._watch_tasks.clear()
+        for watcher in watchers:
+            watcher.cancel()
+        if watchers:
+            await asyncio.gather(*watchers, return_exceptions=True)
 
-        Skipped while inside the cooldown window so repos that are slow to build aren't
-        rebuilt faster than they can be served.
-        """
-        cached = self._tasks.get(cache_key)
-        if (
-            cached is None
-            or is_git_url(cache_key[0])
-            or not cached.done()
-            or cached.cancelled()
-            or cached.exception() is not None
-        ):
-            return
-        if time.monotonic() < self._revalidate_after.get(cache_key, 0.0):
-            return
-        validated = await asyncio.to_thread(get_validated_cache, cache_key[0], self._model_path, cache_key[1])
-        # Only evict if this entry hasn't already been replaced by a concurrent caller.
-        if validated is None and self._tasks.get(cache_key) is cached:
-            self.evict(cache_key)
+    async def _task_for(
+        self,
+        source: str,
+        ref: str | None,
+        cache_key: _CacheKey,
+    ) -> asyncio.Task[SembleIndex]:
+        """Return the shared build task for an exact index variant."""
+        if cache_key not in self._tasks:
+            model_path = await self._await_model()
+            if cache_key not in self._tasks:
+                if len(self._tasks) >= _CACHE_MAX_SIZE:
+                    self.evict(next(iter(self._tasks)))
+                self._dirty.discard(cache_key)
+                self._tasks[cache_key] = asyncio.create_task(
+                    self._build_tracked(source, ref, model_path, cache_key)
+                )
+        self._tasks.move_to_end(cache_key)
+        return self._tasks[cache_key]
+
+    async def _await_index(
+        self,
+        cache_key: _CacheKey,
+        task: asyncio.Task[SembleIndex],
+    ) -> SembleIndex:
+        """Await one build and evict failed tasks so a later request can retry."""
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.done():
+                self.evict(cache_key)
+            raise
+        except Exception:
+            if self._tasks.get(cache_key) is task:
+                self.evict(cache_key)
+            raise
 
     async def get(
         self,
@@ -272,32 +359,15 @@ class _IndexCache:
         ref: str | None = None,
         content: Sequence[ContentType] = (ContentType.CODE,),
     ) -> SembleIndex:
-        """Return an index for the requested source, building and caching it on first access.
-
-        Local paths are revalidated against the on-disk cache on every call (subject to a
-        cooldown scaled by build time), so an entry is rebuilt once its files change.
-        """
+        """Return an index, incrementally rebuilding dirty local-path variants."""
         cache_key = self._compute_cache_key(source, ref, content)
-        await self._evict_if_stale(cache_key)
+        local = not is_git_url(source)
+        if local:
+            self._ensure_watcher(cache_key[0])
 
-        if cache_key not in self._tasks:
-            model_path = await self._await_model()
-            # Re-check after the await: another caller may have populated the entry.
-            if cache_key not in self._tasks:
-                if len(self._tasks) >= _CACHE_MAX_SIZE:
-                    evicted_key, _ = self._tasks.popitem(last=False)
-                    self._revalidate_after.pop(evicted_key, None)
-                self._tasks[cache_key] = asyncio.create_task(self._build_tracked(source, ref, model_path, cache_key))
-        self._tasks.move_to_end(cache_key)
-        task = self._tasks[cache_key]
-        try:
-            return await asyncio.shield(task)
-        except asyncio.CancelledError:  # pragma: no cover
-            if task.done():
-                self.evict(cache_key)
-            raise
-        except Exception:
-            # Only evict if this task hasn't already been replaced by evict()+get().
-            if self._tasks.get(cache_key) is task:
-                self.evict(cache_key)
-            raise
+        while True:
+            if cache_key in self._dirty:
+                self.evict(cache_key, keep_watcher=True)
+            index = await self._await_index(cache_key, await self._task_for(source, ref, cache_key))
+            if not local or cache_key not in self._dirty:
+                return index
