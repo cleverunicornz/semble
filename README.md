@@ -223,35 +223,38 @@ result.chunk.content     # "def save_pretrained(self, path: PathLike, ..."
 
 ## MCP Server
 
-Semble runs as an MCP server so agents can search any codebase directly as a native tool call. Repos are indexed on demand and cached; local paths are re-indexed automatically on file changes.
+Semble runs as a context-bound MCP server for coding agents. The MCP process binds itself to the Git worktree in
+which the agent launched; agents never supply repository paths, baseline paths, identities, or revisions.
 
 | Tool | Description |
 |------|-------------|
-| `search` | Search a codebase with a natural-language or code query. Pass `repo` as a local path or an https:// git URL and `content` as `code`, `docs`, `config`, or `all` (default: `code`). |
-| `find_related` | Given a file path and line number, return chunks semantically similar to the code at that location. |
-| `workspace_search` | Search a clean baseline checkout plus one Git worktree delta. Results remain grouped into `base_results` and `delta_results` and carry `origin` and `change` provenance. |
-| `workspace_changes` | List every changed, added, deleted, or renamed path relative to a workspace's immutable baseline commit. |
-| `workspace_release` | Stop watching a worktree and release its private delta indexes while retaining shared baseline caches. |
+| `semantic_search` | Search the current worktree through an immutable baseline plus a private changed-file delta. The optional `facet` defaults to `workspace`. |
+| `semantic_index_status` | Report the bound repository/revision, exact content coverage and exclusions, physical index sizes, delta generation, freshness, batching policy, and optionally every changed path. |
+
+### Semantic facets
+
+The baseline and delta retain independent vector and BM25 indexes. Results are never collapsed into one unexplained
+ranking.
+
+| Facet | Search view |
+| --- | --- |
+| `workspace` (default) | Effective current code. Returns separate `changed_results` and `unchanged_results` sections. |
+| `changed` | Modified, added, and renamed files from the private delta only. |
+| `unchanged` | Baseline files not modified, renamed, or deleted in this worktree. |
+| `base` | Complete original snapshot, including old versions of files later modified, renamed, or deleted. |
+
+Every result carries `origin` and `change` provenance. Modified, renamed, and deleted paths shadow baseline chunks in
+the effective `workspace` and `unchanged` views without mutating the baseline; `base` deliberately preserves those
+original chunks.
+
+Before each search, Semble synchronizes all Git-visible worktree changes. Filesystem events are normally grouped after
+a 50 ms quiet window and for no more than 200 ms during a continuous burst, allowing one multi-file patch or formatter
+run to publish one atomic delta generation. If search arrives first, it bypasses that wait by reconciling the current
+Git delta and returns only after read-your-writes is satisfied. Large change sets can therefore increase that call's
+latency; `index_context` reports synchronization time, generation, indexed counts, and exclusions rather than silently
+returning stale results.
 
 For per-agent setup instructions, see the [installation docs](docs/installation.md#mcp-server).
-
-### Git workspace facets
-
-`workspace_search` keeps one immutable baseline keyed by repository identity and commit, plus a private
-delta index for each worktree. The caller supplies a clean `baseline_repo`, current worktree `repo`,
-stable `repository` identity, and exact `base_revision`.
-
-| Scope | Search view |
-| --- | --- |
-| `changed` | Added, modified, and renamed files in the worktree delta |
-| `unchanged` | Baseline files not shadowed or deleted by this worktree |
-| `workspace` | Both current facets, returned separately with provenance |
-| `base` | The complete original baseline, including prior versions of changed or deleted files |
-
-The query embedding and tokens are computed once and reused across both physical indexes. Modified and
-deleted paths logically shadow baseline chunks only for their worktree; the shared baseline is never
-mutated. Watcher events update only affected delta files. Reverting a path removes its delta entry and
-reveals the baseline again.
 
 The same lifecycle is available as a Python API:
 
@@ -308,7 +311,11 @@ After fusing, results are reranked with a set of code-aware signals:
 
 Because the embedding model is static with no transformer forward pass at query time, all of this runs in milliseconds on CPU.
 
-Indexes are cached to disk automatically on the first search. On subsequent CLI runs, Semble walks the file tree and compares modification times; added, removed, or changed files are reindexed incrementally without re-embedding unchanged files. In MCP mode, local repositories use a debounced filesystem watcher instead: a relevant source or ignore-rule change invalidates the affected in-memory content index immediately, and the next tool call waits for one shared incremental refresh before searching. Remote Git URLs remain immutable for the MCP server session. A full rebuild only happens when indexing settings change, such as after a Semble upgrade that changes the model, chunking, or cache format.
+Indexes are cached to disk automatically on first use. Subsequent explicit CLI searches walk the file tree and reuse
+unchanged chunks and embeddings. The MCP server instead keeps an immutable baseline index plus one private
+changed-file delta, updates that delta from grouped filesystem events while the agent works, and performs an
+authoritative Git reconciliation before every semantic search. The baseline is rebuilt only for a new pinned revision
+or incompatible indexing settings.
 
 ### Using a custom model
 

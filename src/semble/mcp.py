@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections import OrderedDict
+import time
+from collections import Counter, OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Literal
@@ -13,15 +14,23 @@ from pydantic import Field
 from watchfiles import awatch
 
 from semble.cache import resolve_cache_folder, save_index_to_cache
-from semble.git_workspace import GitWorkspaceSession, open_git_workspace
+from semble.git_workspace import (
+    GitWorkspaceSession,
+    WorkspaceBinding,
+    open_git_workspace,
+    resolve_workspace_binding,
+)
 from semble.index import SembleIndex
 from semble.index.dense import load_model
-from semble.index.files import get_extensions
+from semble.index.files import get_extensions, get_max_file_bytes
 from semble.types import ContentType
-from semble.utils import format_results, is_git_url, resolve_chunk
+from semble.utils import is_git_url
 from semble.workspace import (
+    WORKSPACE_WATCH_DEBOUNCE_MS,
+    WORKSPACE_WATCH_STEP_MS,
     BaselineIdentity,
     BaselineRegistry,
+    ChangeKind,
     SearchScope,
     WorkspaceSearchHit,
     WorkspaceSearchResponse,
@@ -29,22 +38,17 @@ from semble.workspace import (
 
 logger = logging.getLogger(__name__)
 
-_REPO_DESCRIPTION = (
-    "A local directory path or https:// or http:// git URL (e.g. https://github.com/org/repo) to index and "
-    "search. The index is cached after the first call, so repeat queries are fast."
-)
-
-_CACHE_MAX_SIZE = 10  # Max number of cached indexes to keep in memory
+_CACHE_MAX_SIZE = 10
 _WATCH_DEBOUNCE_MS = 200
 _INDEX_RULE_FILES = frozenset({".gitignore", ".sembleignore"})
 ContentSelection = Literal["code", "docs", "config", "all"]
-WorkspaceScopeSelection = Literal["workspace", "changed", "unchanged", "base"]
+SemanticFacet = Literal["workspace", "changed", "unchanged", "base"]
 _CacheKey = tuple[str, tuple[ContentType, ...]]
 _WorkspaceKey = tuple[str, str, BaselineIdentity, tuple[ContentType, ...]]
 
 
 async def _get_index(repo: str, cache: _IndexCache, content: Sequence[ContentType]) -> SembleIndex:
-    """Return a cached index for a repo, rejecting unsafe git transport schemes."""
+    """Return a cached index for an explicit repository source."""
     if is_git_url(repo) and not repo.startswith(("https://", "http://")):
         raise ValueError(f"Only https://, http://, or local directory paths are accepted as `repo`. Got: {repo!r}")
     try:
@@ -56,7 +60,7 @@ async def _get_index(repo: str, cache: _IndexCache, content: Sequence[ContentTyp
 def _resolve_content_selection(
     content: ContentSelection | None, default_content: Sequence[ContentType]
 ) -> tuple[ContentType, ...]:
-    """Resolve an MCP content selection to exact index content types."""
+    """Resolve one exact content-index variant."""
     if content is None:
         return tuple(default_content)
     if content == "all":
@@ -65,7 +69,7 @@ def _resolve_content_selection(
 
 
 def _format_workspace_hit(hit: WorkspaceSearchHit, max_snippet_lines: int | None) -> dict[str, object]:
-    """Format one provenance-bearing hit with bounded source content."""
+    """Format one result with baseline/delta and change provenance."""
     chunk = hit.result.chunk
     payload: dict[str, object] = {
         "file_path": chunk.file_path,
@@ -82,111 +86,254 @@ def _format_workspace_hit(hit: WorkspaceSearchHit, max_snippet_lines: int | None
     return payload
 
 
-def _format_workspace_response(
-    response: WorkspaceSearchResponse,
-    max_snippet_lines: int | None,
+def _index_context(
+    binding: WorkspaceBinding,
+    session: GitWorkspaceSession,
+    content: Sequence[ContentType],
+    facet: SearchScope,
+    *,
+    session_acquire_ms: float,
+    synchronization_ms: float,
 ) -> dict[str, object]:
-    """Limit workspace-result content for the MCP response."""
+    index = session.index
+    changes = index.changed_paths
+    counts = Counter(change.value for change in changes.values())
     return {
-        "baseline": {
-            "repository": response.baseline.repository,
-            "revision": response.baseline.revision,
+        "repository": binding.identity.repository,
+        "workspace_root": str(binding.workspace_root),
+        "branch": binding.branch,
+        "baseline_revision": binding.identity.revision,
+        "baseline_source": binding.baseline_source,
+        "facet": facet.value,
+        "content": [item.value for item in content],
+        "index_state": "current",
+        "read_your_writes": True,
+        "generation": index.generation,
+        "session_acquire_ms": round(session_acquire_ms, 3),
+        "synchronization_ms": round(synchronization_ms, 3),
+        "watcher": {
+            "quiet_window_ms": WORKSPACE_WATCH_STEP_MS,
+            "maximum_batch_window_ms": WORKSPACE_WATCH_DEBOUNCE_MS,
+            "behavior": (
+                "Filesystem bursts are grouped, but every semantic_search synchronizes Git-visible changes "
+                "before reading either index."
+            ),
         },
-        "scope": response.scope.value,
-        "changed_file_count": response.changed_file_count,
-        "base_results": [_format_workspace_hit(result, max_snippet_lines) for result in response.base_results],
-        "delta_results": [_format_workspace_hit(result, max_snippet_lines) for result in response.delta_results],
+        "baseline_index": {
+            "immutable": True,
+            "files": index.baseline_file_count,
+            "chunks": index.baseline_chunk_count,
+        },
+        "delta_index": {
+            "immutable": False,
+            "changed_paths": len(changes),
+            "searchable_files": index.delta_file_count,
+            "chunks": index.delta_chunk_count,
+            "shadowed_baseline_paths": index.shadowed_file_count,
+            "changes_by_kind": {kind.value: counts.get(kind.value, 0) for kind in ChangeKind},
+        },
+        "coverage": {
+            "indexed_extensions": sorted(get_extensions(content)),
+            "maximum_file_bytes": get_max_file_bytes(),
+            "included": "Supported files inside this Paseo workspace for the selected content classes.",
+            "excluded": [
+                "paths outside the current workspace",
+                "Git-ignored and .sembleignore paths",
+                "unsupported and binary files",
+                "empty files",
+                "files above the configured size limit",
+                "content classes not selected for this index",
+            ],
+        },
     }
 
 
-def _register_workspace_tools(
+def _format_semantic_response(
+    query: str,
+    response: WorkspaceSearchResponse,
+    context: dict[str, object],
+    max_snippet_lines: int | None,
+) -> dict[str, object]:
+    changed_results: list[dict[str, object]] = []
+    unchanged_results: list[dict[str, object]] = []
+    base_results: list[dict[str, object]] = []
+    if response.scope in {SearchScope.WORKSPACE, SearchScope.CHANGED}:
+        changed_results = [_format_workspace_hit(result, max_snippet_lines) for result in response.delta_results]
+    if response.scope in {SearchScope.WORKSPACE, SearchScope.UNCHANGED}:
+        unchanged_results = [_format_workspace_hit(result, max_snippet_lines) for result in response.base_results]
+    if response.scope is SearchScope.BASE:
+        base_results = [_format_workspace_hit(result, max_snippet_lines) for result in response.base_results]
+    return {
+        "query": query,
+        "index_context": context,
+        "changed_results": changed_results,
+        "unchanged_results": unchanged_results,
+        "base_results": base_results,
+    }
+
+
+def _error_response(action: str, error: Exception, binding: WorkspaceBinding | None) -> str:
+    return json.dumps(
+        {
+            "error": f"Unable to {action} the current semantic workspace.",
+            "detail": str(error),
+            "index_context": {
+                "workspace_root": None if binding is None else str(binding.workspace_root),
+                "index_state": "error",
+                "read_your_writes": False,
+            },
+        }
+    )
+
+
+def _register_semantic_tools(
     server: FastMCP,
     workspace_cache: _WorkspaceCache,
     default_content: Sequence[ContentType],
+    binding: WorkspaceBinding | None,
+    binding_error: str | None,
 ) -> None:
-    """Register Git-pinned workspace search and provenance tools."""
+    async def current_session(content: Sequence[ContentType]) -> tuple[GitWorkspaceSession, float]:
+        if binding is None:
+            raise RuntimeError(binding_error or "Semble was not launched inside a Git workspace")
+        started = time.perf_counter()
+        session = await workspace_cache.get(
+            repo=str(binding.workspace_root),
+            baseline_repo=str(binding.baseline_root),
+            identity=binding.identity,
+            content=content,
+        )
+        return session, (time.perf_counter() - started) * 1000
 
     @server.tool()
-    async def workspace_search(
-        query: Annotated[str, Field(description="Natural language or code query.")],
-        repo: Annotated[str, Field(description="Current Git worktree root.")],
-        baseline_repo: Annotated[str, Field(description="Clean checkout rooted at the pinned baseline commit.")],
-        repository: Annotated[str, Field(description="Stable repository identity shared by compatible baselines.")],
-        base_revision: Annotated[str, Field(description="Immutable Git commit used to create the worktree.")],
-        scope: Annotated[
-            WorkspaceScopeSelection,
-            Field(description="Search the effective workspace, changed files, unchanged files, or raw base."),
+    async def semantic_search(
+        query: Annotated[
+            str,
+            Field(
+                description=(
+                    "Focused natural-language, symbol, or code query for the current Paseo workspace. "
+                    "Do not provide a repository path; the server is already bound to this agent's worktree."
+                )
+            ),
+        ],
+        facet: Annotated[
+            SemanticFacet,
+            Field(
+                description=(
+                    "Optional search view. workspace (default) searches the effective current code and returns "
+                    "changed_results from the private delta plus unchanged_results from the immutable baseline. "
+                    "changed searches only modified/added/renamed content. unchanged searches only untouched "
+                    "baseline paths. base searches the complete original snapshot, including old versions of "
+                    "files later modified, renamed, or deleted."
+                )
+            ),
         ] = "workspace",
-        top_k: Annotated[int, Field(description="Results to return per physical index facet.", ge=1)] = 5,
+        top_k: Annotated[
+            int,
+            Field(
+                description=(
+                    "Maximum results from each independent physical facet. In workspace mode, each of the "
+                    "baseline and delta indexes may return up to this many results."
+                ),
+                ge=1,
+            ),
+        ] = 5,
         max_snippet_lines: Annotated[
             int | None,
-            Field(description="Lines of source per result. 0 omits content; None returns complete chunks.", ge=0),
+            Field(
+                description=(
+                    "Source lines per result. 10 gives a compact confirming snippet; 0 returns locations only; "
+                    "None returns complete chunks."
+                ),
+                ge=0,
+            ),
         ] = 10,
         content: Annotated[
             ContentSelection | None,
-            Field(description="Content to search. Defaults to the MCP server's configured content."),
+            Field(
+                description=(
+                    "Optional content class: code, docs, config, or all. Defaults to the server configuration. "
+                    "The response states the exact classes and exclusions searched."
+                )
+            ),
         ] = None,
     ) -> str:
-        """Search a Git-pinned baseline and private worktree delta with explicit provenance."""
+        """Search the current agent workspace's immutable baseline and private changed-file delta.
+
+        Use the default workspace facet for normal investigation: it searches current changed and unchanged
+        content through separate BM25/vector indexes and returns separate result sections with provenance.
+        Narrow to changed or unchanged only to remove noise. Use base when comparing against the original
+        pinned snapshot, including content since replaced or deleted. Before every response, Semble synchronizes
+        all Git-visible changes, so the first search after an edit provides read-your-writes consistency. Large
+        edit batches may make that call wait; index_context reports synchronization time and exact coverage.
+        """
         selected_content = _resolve_content_selection(content, default_content)
         try:
-            session = await workspace_cache.get(
-                repo=repo,
-                baseline_repo=baseline_repo,
-                identity=BaselineIdentity(repository, base_revision),
-                content=selected_content,
-            )
-            response = await asyncio.to_thread(
-                session.index.search,
-                query,
-                scope=SearchScope(scope),
-                top_k=top_k,
-            )
+            session, acquire_ms = await current_session(selected_content)
+            sync_started = time.perf_counter()
+            await session.synchronize()
+            synchronization_ms = (time.perf_counter() - sync_started) * 1000
+            scope = SearchScope(facet)
+            response = await asyncio.to_thread(session.index.search, query, scope=scope, top_k=top_k)
         except Exception as exc:
-            return f"Failed to search workspace {repo!r}: {exc}"
-        return json.dumps(_format_workspace_response(response, max_snippet_lines))
+            return _error_response("search", exc, binding)
+        assert binding is not None
+        context = _index_context(
+            binding,
+            session,
+            selected_content,
+            scope,
+            session_acquire_ms=acquire_ms,
+            synchronization_ms=synchronization_ms,
+        )
+        return json.dumps(_format_semantic_response(query, response, context, max_snippet_lines))
 
     @server.tool()
-    async def workspace_changes(
-        repo: Annotated[str, Field(description="Current Git worktree root.")],
-        baseline_repo: Annotated[str, Field(description="Clean checkout rooted at the pinned baseline commit.")],
-        repository: Annotated[str, Field(description="Stable repository identity shared by compatible baselines.")],
-        base_revision: Annotated[str, Field(description="Immutable Git commit used to create the worktree.")],
+    async def semantic_index_status(
+        include_changed_paths: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Include the complete changed-path list. Leave false for compact coverage and freshness "
+                    "metadata; use true only when the agent needs to inspect every modified, added, deleted, "
+                    "or renamed path."
+                )
+            ),
+        ] = False,
         content: Annotated[
             ContentSelection | None,
-            Field(description="Content variant whose live workspace session should be inspected."),
+            Field(description="Content-index variant to inspect. Defaults to the server configuration."),
         ] = None,
     ) -> str:
-        """List every current path state relative to the worktree's immutable baseline."""
+        """Describe exactly what semantic_search can see in this Paseo workspace.
+
+        Reports repository, worktree, pinned baseline revision, content coverage, exclusions, baseline and delta
+        sizes, change counts, publication generation, batching policy, and current freshness. This call also
+        synchronizes pending Git-visible changes. It never accepts or indexes an arbitrary external path.
+        """
         selected_content = _resolve_content_selection(content, default_content)
         try:
-            session = await workspace_cache.get(
-                repo=repo,
-                baseline_repo=baseline_repo,
-                identity=BaselineIdentity(repository, base_revision),
-                content=selected_content,
-            )
+            session, acquire_ms = await current_session(selected_content)
+            sync_started = time.perf_counter()
+            await session.synchronize()
+            synchronization_ms = (time.perf_counter() - sync_started) * 1000
         except Exception as exc:
-            return f"Failed to inspect workspace {repo!r}: {exc}"
-        changes = session.index.changed_paths
-        return json.dumps(
-            {
-                "baseline": {
-                    "repository": session.index.identity.repository,
-                    "revision": session.index.identity.revision,
-                },
-                "changed_file_count": len(changes),
-                "changes": [{"file_path": path, "change": change.value} for path, change in sorted(changes.items())],
-            }
+            return _error_response("inspect", exc, binding)
+        assert binding is not None
+        context = _index_context(
+            binding,
+            session,
+            selected_content,
+            SearchScope.WORKSPACE,
+            session_acquire_ms=acquire_ms,
+            synchronization_ms=synchronization_ms,
         )
-
-    @server.tool()
-    async def workspace_release(
-        repo: Annotated[str, Field(description="Git worktree root whose live layered sessions should be released.")],
-    ) -> str:
-        """Release a worktree's private overlays without deleting source or baseline caches."""
-        released = await workspace_cache.release_workspace(repo)
-        return json.dumps({"workspace": str(Path(repo).resolve()), "released_sessions": released})
+        if include_changed_paths:
+            context["changed_paths"] = [
+                {"file_path": path, "change": change.value}
+                for path, change in sorted(session.index.changed_paths.items())
+            ]
+        return json.dumps({"index_context": context})
 
 
 def create_server(
@@ -194,132 +341,59 @@ def create_server(
     default_content: Sequence[ContentType] = (ContentType.CODE,),
     *,
     workspace_cache: _WorkspaceCache | None = None,
+    binding: WorkspaceBinding | None = None,
+    binding_error: str | None = None,
 ) -> FastMCP:
-    """Build and return a configured FastMCP server backed by the given caches."""
+    """Build a context-bound semantic-search MCP server."""
     workspace_cache = workspace_cache or _WorkspaceCache(cache)
     server = FastMCP(
         "semble",
         instructions=(
-            "Instant code search for any local or remote git repository. "
-            "Call `search` once with a focused query, it returns the file path and exact line. "
-            "Navigate directly to that file at the given line; do not grep for the same content. "
-            "Use `find_related` to discover similar code elsewhere in the same repo. "
-            "When working in a local project, pass the project root as `repo`. "
-            "For remote repos, pass an explicit https:// URL. Never guess or infer URLs."
+            "Use semantic_search for semantic discovery in the current Paseo agent workspace. "
+            "The server already knows the worktree, repository, and immutable starting revision; never guess or "
+            "send paths. The default workspace facet is normally correct: it searches the private changed-file "
+            "delta and untouched baseline independently, then returns changed_results and unchanged_results as "
+            "separate sections. Use changed or unchanged only to reduce noise. Use base to inspect the complete "
+            "original snapshot, including old versions of modified or deleted files. Every search synchronizes "
+            "pending Git-visible edits before reading and reports exact index coverage and freshness. "
+            "Use semantic_index_status when you need the full changed-path list or index diagnostics."
         ),
     )
-
-    @server.tool()
-    async def search(
-        query: Annotated[str, Field(description="Natural language or code query.")],
-        repo: Annotated[str, Field(description=_REPO_DESCRIPTION)],
-        top_k: Annotated[int, Field(description="Number of results to return.", ge=1)] = 5,
-        max_snippet_lines: Annotated[
-            int | None,
-            Field(
-                description=(
-                    "Lines of source to include per result. "
-                    "Default (10): function/class signature + first body lines, enough to confirm the location. "
-                    "0: file path and line range only. None: full chunk (~10-20 lines). "
-                    "If the snippet does not contain enough context to confirm you have the right location, "
-                    "call again with max_snippet_lines=None."
-                ),
-                ge=0,
-            ),
-        ] = 10,
-        content: Annotated[
-            ContentSelection | None,
-            Field(description="Content to search. Defaults to the MCP server's configured content."),
-        ] = None,
-    ) -> str:
-        """Search once with a focused query describing what the code does or its name.
-
-        Write queries using function/class names or behavior descriptions, not error messages.
-        Returns file paths and line numbers — navigate directly there, do not repeat the search.
-        Pass a git URL or local path as `repo`; indexes are cached for the session.
-        """
-        selected_content = _resolve_content_selection(content, default_content)
-        try:
-            index = await _get_index(repo, cache, selected_content)
-        except ValueError as exc:
-            return str(exc)
-        results = index.search(query, top_k=top_k, max_snippet_lines=max_snippet_lines)
-        if not results:
-            return json.dumps({"error": "No results found."})
-        return json.dumps(format_results(query, results, max_snippet_lines))
-
-    @server.tool()
-    async def find_related(
-        file_path: Annotated[
-            str,
-            Field(description="Path to the file as stored in the index (use file_path from a search result)."),
-        ],
-        line: Annotated[int, Field(description="Line number (1-indexed).")],
-        repo: Annotated[str, Field(description=_REPO_DESCRIPTION)],
-        top_k: Annotated[int, Field(description="Number of similar chunks to return.", ge=1)] = 5,
-        max_snippet_lines: Annotated[
-            int | None,
-            Field(
-                description=(
-                    "Lines of source per result. "
-                    "Default 10 = signature + first body lines. 0 = location only. None = full chunk."
-                ),
-                ge=0,
-            ),
-        ] = 10,
-        content: Annotated[
-            ContentSelection | None,
-            Field(description="Content containing the related file. Defaults to the MCP server configuration."),
-        ] = None,
-    ) -> str:
-        """Find code similar to a known location.
-
-        Useful for discovering all implementations of an interface, all callers of a function,
-        or all tests for a class. Use after `search` when you need related code beyond the primary result.
-        Pass `file_path` and `line` from a prior search result.
-        """
-        selected_content = _resolve_content_selection(content, default_content)
-        try:
-            index = await _get_index(repo, cache, selected_content)
-        except ValueError as exc:
-            return str(exc)
-        chunk = resolve_chunk(index.chunks, file_path, line)
-        if chunk is None:
-            return (
-                f"No chunk found at {file_path}:{line}. "
-                "Make sure the file is indexed and the line number is within a known chunk."
-            )
-        results = index.find_related(chunk, top_k=top_k, max_snippet_lines=max_snippet_lines)
-        if not results:
-            return json.dumps({"error": f"No related chunks found for {file_path}:{line}."})
-        label = f"Chunks related to {file_path}:{line}"
-        return json.dumps(format_results(label, results, max_snippet_lines))
-
-    _register_workspace_tools(server, workspace_cache, default_content)
-
+    _register_semantic_tools(server, workspace_cache, default_content, binding, binding_error)
     return server
 
 
 async def serve(
     content: Sequence[ContentType] = (ContentType.CODE,),
 ) -> None:
-    """Start an MCP stdio server."""
-    cache = _IndexCache()
+    """Start a context-bound MCP stdio server for the current workspace."""
+    cache = _IndexCache(watch=False)
     workspace_cache = _WorkspaceCache(cache)
 
     async def _load_and_prewarm() -> None:
-        """Pre-load the embedding model in parallel with starting the server."""
         try:
             _, cache._model_path = await asyncio.to_thread(load_model)
         except Exception as exc:
             logger.exception("Failed to load embedding model")
             cache._model_error = exc
-            return
         finally:
             cache._model_ready.set()
 
     init_task = asyncio.create_task(_load_and_prewarm())
-    server = create_server(cache, default_content=content, workspace_cache=workspace_cache)
+    binding: WorkspaceBinding | None = None
+    binding_error: str | None = None
+    try:
+        binding = await asyncio.to_thread(resolve_workspace_binding, Path.cwd(), resolve_cache_folder())
+    except Exception as exc:
+        binding_error = str(exc)
+        logger.warning("Semantic workspace binding is unavailable: %s", exc)
+    server = create_server(
+        cache,
+        default_content=content,
+        workspace_cache=workspace_cache,
+        binding=binding,
+        binding_error=binding_error,
+    )
     try:
         await server.run_stdio_async()
     finally:

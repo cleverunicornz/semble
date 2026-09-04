@@ -92,36 +92,48 @@ _ZED_SERVER_CONFIG: dict[str, object] = {  # Zed: command/args only, no "source"
 
 INSTRUCTIONS = f"""\
 {SEMBLE_START}
-## Semble Code Search
+## Semble Semantic Search
 
-A `semble` MCP server is available with two tools:
-- `mcp__semble__search` — search the codebase with a natural-language or code query.
-- `mcp__semble__find_related` — find code similar to a specific file and line.
+A context-bound `semble` MCP server is available with two tools:
+- `mcp__semble__semantic_search` — search the current agent workspace.
+- `mcp__semble__semantic_index_status` — inspect exact index coverage, freshness, and changed paths.
 
-Use `mcp__semble__search` to find where something is implemented — instead of using Grep or Glob to discover files. After semble returns the file and line, navigate there directly and read that file. Do not grep for the same content again.
+The server already knows this agent's worktree, repository identity, and immutable starting revision. Never send or
+guess a repository path.
 
-Pass `content="docs"` to the MCP search tool for documentation and prose, `content="config"` for config files, or `content="all"` for everything. On the CLI, use `--content docs`, `--content config`, or `--content all` instead.
+`semantic_search` defaults to `facet="workspace"`, the normal choice. It searches two independent indexes and returns
+two explicit sections: `changed_results` from modified/added/renamed files in the private delta, and
+`unchanged_results` from untouched files in the immutable baseline. Modified, renamed, and deleted paths shadow their
+old baseline versions in this effective current-workspace view.
 
-For CLI fallback or sub-agents without MCP access, use:
+Use a narrower facet only when it removes useful noise:
+- `changed` — current changed-file delta only.
+- `unchanged` — untouched baseline paths only.
+- `base` — complete original snapshot, including old versions of files later modified, renamed, or deleted.
 
-```bash
-semble search "authentication flow" ./my-project --max-snippet-lines 10
-semble search "deployment guide" ./my-project --content docs
-semble search "database host port" ./my-project --content config
-semble find-related src/auth.py 42 ./my-project
-semble search "save model to disk" ./my-project --top-k 10
-```
-
-The index is built on first run and cached automatically. If `semble` is not on `$PATH`, use `uvx --from "{SEMBLE_PIN}" semble`.
+Every search synchronizes Git-visible writes before reading, so the first call after an edit is read-your-writes.
+Large edit or formatter batches can make that call wait while the delta publishes; `index_context` reports the
+generation, synchronization time, batching policy, indexed content classes, counts, and exclusions. Paths outside the
+current worktree, ignored files, unsupported/binary/empty/oversized files, and unselected content classes are not
+searched.
 
 ### Workflow
 
-1. Call `mcp__semble__search` with a query describing what the code does or its name. The tool returns results with 10 lines of context each (function/class signature + first body lines, enough to confirm the location).
-2. Navigate directly to the top result's file and line. Read only the function or class at that location.
-3. Make the edit. Do not re-search or grep for the same content.
-4. Set the MCP search tool's `content` field to `docs`, `config`, or `all` when searching beyond code.
-5. Optionally use `mcp__semble__find_related` with `file_path`, `line`, and the same `content` selection to discover similar code elsewhere.
-6. Use Grep only when you need every occurrence of a literal string across the whole repo (e.g., all callers of a renamed function).
+1. Call `mcp__semble__semantic_search` with a focused behavior, symbol, or code query. Omit `facet` for the combined
+   current workspace.
+2. Read `changed_results` and `unchanged_results` as separate ranked facets; use each result's `origin` and `change`
+   fields as provenance.
+3. Navigate directly to the returned file and line. Do not grep for the same content again.
+4. After editing or formatting, call semantic search normally; it synchronizes pending delta changes itself.
+5. Use `facet="changed"` to search only task-local work, `facet="unchanged"` for supporting untouched code, or
+   `facet="base"` to compare with the original snapshot.
+6. Set `content="docs"`, `content="config"`, or `content="all"` only when searching beyond code.
+7. Call `mcp__semble__semantic_index_status` when you need full changed-path details or to verify what is indexed.
+8. Use Grep only when you need every literal occurrence rather than semantic discovery.
+
+For CLI fallback or subprocesses without MCP access, use `semble search`; CLI search is explicit repository search and
+does not provide the context-bound baseline/delta facets.
+If `semble` is not on `PATH`, use `uvx --from "{SEMBLE_PIN}" semble search ...`.
 {SEMBLE_END}
 """
 

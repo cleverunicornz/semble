@@ -323,7 +323,15 @@ Add to `~/.zcode/cli/config.json` under the nested `mcp.servers` key (or use Set
 
 </details>
 
-The MCP server indexes each requested content selection on first use and caches it separately. Searches default to code; append `--content docs`, `--content config`, or `--content all` to the server command to change that default. The `content` argument on an individual MCP search overrides it. For example, in Claude Code:
+The MCP process binds itself to the Git worktree in which the agent launches. Its primary tool is
+`semantic_search`; agents provide a query and optional facet, never a repository path. The default
+`workspace` facet returns separate changed and unchanged sections from independent delta and baseline
+indexes. `changed`, `unchanged`, and `base` narrow that view; `base` retains original versions of paths
+later modified or deleted. `semantic_index_status` reports the exact repository, pinned revision,
+content classes, exclusions, index sizes, delta generation, batching policy, and freshness.
+
+Searches default to code; append `--content docs`, `--content config`, or `--content all` to the server
+command to change the default. An individual semantic search can override it. For example:
 
 ```bash
 claude mcp add semble -s user -- uvx --from "semble[mcp]" semble --content all

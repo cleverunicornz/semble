@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import threading
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,8 @@ import pytest
 from model2vec import StaticModel
 from watchfiles import Change
 
-from semble.mcp import _CACHE_MAX_SIZE, _IndexCache, _WorkspaceCache, create_server, serve
+from semble.git_workspace import WorkspaceBinding
+from semble.mcp import _CACHE_MAX_SIZE, _get_index, _IndexCache, _WorkspaceCache, create_server, serve
 from semble.types import Chunk, ContentType, SearchResult
 from semble.utils import format_results, is_git_url, resolve_chunk
 from semble.workspace import (
@@ -304,126 +306,23 @@ async def test_index_cache_ignores_cache_save_failure(cache: _IndexCache, tmp_pa
         assert await cache.get(str(tmp_path)) is fake_index
 
 
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    ("tool", "args"),
-    [
-        ("search", {"query": "foo", "repo": "https://github.com/x/y"}),
-        ("find_related", {"file_path": "src/foo.py", "line": 1, "repo": "https://github.com/x/y"}),
-    ],
-)
-async def test_tool_index_failure(cache: _IndexCache, tool: str, args: dict[str, object]) -> None:
-    """Both tools return a friendly error message when indexing fails."""
-    with patch("semble.mcp.SembleIndex.from_git", side_effect=RuntimeError("clone failed")):
-        server = create_server(cache)
-        result = await server.call_tool(tool, args)
-    text = _tool_text(result)
-    assert "Failed to index" in text
-    assert "clone failed" in text
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    ("tool", "args", "method", "results", "chunks", "expected_substrings"),
-    [
-        pytest.param(
-            "search",
-            {"query": "bar", "repo": "/some/path"},
-            "search",
-            [SearchResult(chunk=make_chunk("def bar(): pass", "src/bar.py"), score=0.9)],
-            None,
-            ["bar", "0.9"],
-            id="search_with_results",
-        ),
-        pytest.param(
-            "search",
-            {"query": "nothing", "repo": "/some/path"},
-            "search",
-            [],
-            None,
-            ["No results found"],
-            id="search_no_results",
-        ),
-        pytest.param(
-            "find_related",
-            {"file_path": "src/foo.py", "line": 1, "repo": "/some/path"},
-            "find_related",
-            [SearchResult(chunk=make_chunk("class Foo: pass", "src/foo.py"), score=0.8)],
-            [make_chunk("class Foo: pass", "src/foo.py")],
-            ["src/foo.py:1", "0.8"],
-            id="find_related_with_results",
-        ),
-        pytest.param(
-            "find_related",
-            {"file_path": "src/foo.py", "line": 1, "repo": "/some/path"},
-            "find_related",
-            [],
-            [make_chunk("class Foo: pass", "src/foo.py")],
-            ["No related chunks found"],
-            id="find_related_no_results",
-        ),
-        pytest.param(
-            "find_related",
-            {"file_path": "src/unknown.py", "line": 1, "repo": "/some/path"},
-            "find_related",
-            [],
-            [],
-            ["No chunk found"],
-            id="find_related_unknown_file",
-        ),
-    ],
-)
-async def test_tool_output(
+def _semantic_server(
     cache: _IndexCache,
-    tool: str,
-    args: dict[str, Any],
-    method: str,
-    results: list[SearchResult],
-    chunks: list[Chunk] | None,
-    expected_substrings: list[str],
-) -> None:
-    """Search and find_related format results (or an empty-state message) through the server."""
-    text = await _call_tool(cache, tool, args, index_method=method, index_return=results, index_chunks=chunks)
-    for substring in expected_substrings:
-        assert substring in text
-
-
-@pytest.mark.anyio
-async def test_search_builds_exact_content_indexes(
-    cache: _IndexCache,
-    mock_model: StaticModel,
-    tmp_project: Path,
-) -> None:
-    """MCP search lazily builds the exact requested content index."""
-    (tmp_project / "settings.toml").write_text("project = 'semble'\n")
-    expected = [
-        (None, {".py"}),
-        ("docs", {".md"}),
-        ("config", {".toml"}),
-        ("all", {".md", ".py", ".toml"}),
-    ]
-
-    with (
-        patch("semble.index.index.load_model", return_value=(mock_model, "/fake/model")),
-        patch("semble.mcp.save_index_to_cache"),
-    ):
-        server = create_server(cache)
-        for content, expected_suffixes in expected:
-            args = {"query": "project", "repo": str(tmp_project), "top_k": 20}
-            if content is not None:
-                args["content"] = content
-            result = await server.call_tool("search", args)
-            payload = json.loads(_tool_text(result))
-            assert {Path(item["file_path"]).suffix for item in payload["results"]} == expected_suffixes
-
-
-@pytest.mark.anyio
-async def test_workspace_search_tool_returns_scoped_provenance(cache: _IndexCache, tmp_path: Path) -> None:
-    """workspace_search preserves separate base/delta facets and honors location-only output."""
-    identity = BaselineIdentity("example/repository", "a" * 40)
+    tmp_path: Path,
+    *,
+    scope: SearchScope = SearchScope.WORKSPACE,
+) -> tuple[Any, MagicMock, MagicMock, WorkspaceBinding]:
+    identity = BaselineIdentity("https://github.com/example/project.git", "a" * 40)
+    binding = WorkspaceBinding(
+        workspace_root=tmp_path / "worktree",
+        baseline_root=tmp_path / "baseline",
+        identity=identity,
+        branch="agent-task",
+        baseline_source="primary_checkout",
+    )
     response = WorkspaceSearchResponse(
         baseline=identity,
-        scope=SearchScope.WORKSPACE,
+        scope=scope,
         changed_file_count=1,
         base_results=(
             WorkspaceSearchHit(
@@ -441,86 +340,217 @@ async def test_workspace_search_tool_returns_scoped_provenance(cache: _IndexCach
         ),
     )
     session = MagicMock()
+    session.synchronize = AsyncMock()
     session.index.search.return_value = response
+    session.index.changed_paths = {"changed.py": ChangeKind.MODIFIED}
+    session.index.generation = 4
+    session.index.baseline_file_count = 120
+    session.index.baseline_chunk_count = 840
+    session.index.delta_file_count = 1
+    session.index.delta_chunk_count = 3
+    session.index.shadowed_file_count = 1
     workspace_cache = MagicMock()
     workspace_cache.get = AsyncMock(return_value=session)
-    server = create_server(cache, workspace_cache=workspace_cache)
-    result = await server.call_tool(
-        "workspace_search",
-        {
-            "query": "changed behavior",
-            "repo": str(tmp_path / "worktree"),
-            "baseline_repo": str(tmp_path / "baseline"),
-            "repository": identity.repository,
-            "base_revision": identity.revision,
-            "scope": "workspace",
-            "top_k": 5,
-            "max_snippet_lines": 0,
-        },
-    )
-    payload = json.loads(_tool_text(result))
-    assert payload["baseline"] == {
-        "repository": identity.repository,
-        "revision": identity.revision,
-    }
-    assert payload["changed_file_count"] == 1
-    assert payload["base_results"][0]["origin"] == "base"
-    assert payload["base_results"][0]["change"] == "unchanged"
-    assert payload["delta_results"][0]["origin"] == "delta"
-    assert payload["delta_results"][0]["change"] == "modified"
-    assert "content" not in payload["base_results"][0]
-    session.index.search.assert_called_once_with("changed behavior", scope=SearchScope.WORKSPACE, top_k=5)
+    server = create_server(cache, workspace_cache=workspace_cache, binding=binding)
+    return server, workspace_cache, session, binding
 
 
 @pytest.mark.anyio
-async def test_workspace_changes_tool_lists_authoritative_path_states(cache: _IndexCache, tmp_path: Path) -> None:
-    """workspace_changes exposes sorted Git-derived delta membership without searching."""
-    identity = BaselineIdentity("example/repository", "c" * 40)
-    session = MagicMock()
-    session.index.identity = identity
-    session.index.changed_paths = {
-        "z_deleted.py": ChangeKind.DELETED,
-        "a_modified.py": ChangeKind.MODIFIED,
-    }
-    workspace_cache = MagicMock()
-    workspace_cache.get = AsyncMock(return_value=session)
-    server = create_server(cache, workspace_cache=workspace_cache)
-    result = await server.call_tool(
-        "workspace_changes",
-        {
-            "repo": str(tmp_path / "worktree"),
-            "baseline_repo": str(tmp_path / "baseline"),
-            "repository": identity.repository,
-            "base_revision": identity.revision,
-        },
-    )
+async def test_semantic_search_defaults_to_current_workspace_with_separate_facets(
+    cache: _IndexCache,
+    tmp_path: Path,
+) -> None:
+    """The primary tool is path-free, current, and provenance-separated by default."""
+    server, workspace_cache, session, binding = _semantic_server(cache, tmp_path)
+
+    result = await server.call_tool("semantic_search", {"query": "changed behavior"})
     payload = json.loads(_tool_text(result))
-    assert payload == {
-        "baseline": {
-            "repository": identity.repository,
-            "revision": identity.revision,
-        },
-        "changed_file_count": 2,
-        "changes": [
-            {"file_path": "a_modified.py", "change": "modified"},
-            {"file_path": "z_deleted.py", "change": "deleted"},
-        ],
-    }
+
+    workspace_cache.get.assert_awaited_once_with(
+        repo=str(binding.workspace_root),
+        baseline_repo=str(binding.baseline_root),
+        identity=binding.identity,
+        content=(ContentType.CODE,),
+    )
+    session.synchronize.assert_awaited_once()
+    session.index.search.assert_called_once_with(
+        "changed behavior",
+        scope=SearchScope.WORKSPACE,
+        top_k=5,
+    )
+    assert payload["changed_results"][0]["file_path"] == "changed.py"
+    assert payload["changed_results"][0]["origin"] == "delta"
+    assert payload["unchanged_results"][0]["file_path"] == "stable.py"
+    assert payload["unchanged_results"][0]["origin"] == "base"
+    assert not payload["base_results"]
+    context = payload["index_context"]
+    assert context["facet"] == "workspace"
+    assert context["baseline_revision"] == "a" * 40
+    assert context["index_state"] == "current"
+    assert context["read_your_writes"] is True
+    assert context["generation"] == 4
+    assert context["baseline_index"] == {"immutable": True, "files": 120, "chunks": 840}
+    assert context["delta_index"]["changed_paths"] == 1
+    assert context["watcher"]["quiet_window_ms"] == 50
+    assert context["watcher"]["maximum_batch_window_ms"] == 200
 
 
 @pytest.mark.anyio
-async def test_workspace_release_tool_closes_private_sessions(cache: _IndexCache, tmp_path: Path) -> None:
-    """workspace_release forwards the canonical worktree lifecycle boundary."""
-    workspace_cache = MagicMock()
-    workspace_cache.release_workspace = AsyncMock(return_value=2)
-    server = create_server(cache, workspace_cache=workspace_cache)
-    repo = tmp_path / "worktree"
-    result = await server.call_tool("workspace_release", {"repo": str(repo)})
-    assert json.loads(_tool_text(result)) == {
-        "workspace": str(repo.resolve()),
-        "released_sessions": 2,
+async def test_semantic_search_immediate_first_call_reads_new_workspace_bytes(
+    cache: _IndexCache,
+    tmp_path: Path,
+    mock_model: StaticModel,
+) -> None:
+    """A post-write search synchronizes the delta and preserves the immutable base facet."""
+    baseline = tmp_path / "baseline"
+    worktree = tmp_path / "worktree"
+    subprocess.run(["git", "init", "-b", "main", str(baseline)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(baseline), "config", "user.name", "Semble Test"], check=True)
+    subprocess.run(["git", "-C", str(baseline), "config", "user.email", "semble@example.invalid"], check=True)
+    (baseline / "auth.py").write_text("def authenticate():\n    return 'original amber credential'\n")
+    subprocess.run(["git", "-C", str(baseline), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(baseline), "commit", "-m", "base"], check=True, capture_output=True)
+    revision = subprocess.run(
+        ["git", "-C", str(baseline), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "clone", str(baseline), str(worktree)], check=True, capture_output=True)
+    binding = WorkspaceBinding(
+        workspace_root=worktree,
+        baseline_root=baseline,
+        identity=BaselineIdentity("example/project", revision),
+        branch="main",
+        baseline_source="primary_checkout",
+    )
+    workspace_cache = _WorkspaceCache(cache)
+    server = create_server(cache, workspace_cache=workspace_cache, binding=binding)
+
+    with (
+        patch("semble.index.index.load_model", return_value=(mock_model, "/fake/model")),
+        patch("semble.cache.save_index_to_cache"),
+    ):
+        initial = json.loads(
+            _tool_text(await server.call_tool("semantic_search", {"query": "original amber credential"}))
+        )
+        assert initial["unchanged_results"][0]["file_path"] == "auth.py"
+
+        (worktree / "auth.py").write_text("def authenticate():\n    return 'current violet credential'\n")
+        current = json.loads(
+            _tool_text(await server.call_tool("semantic_search", {"query": "current violet credential"}))
+        )
+        assert current["changed_results"][0]["file_path"] == "auth.py"
+        assert current["changed_results"][0]["origin"] == "delta"
+        assert not current["unchanged_results"]
+        assert current["index_context"]["generation"] == 1
+        assert current["index_context"]["read_your_writes"] is True
+
+        original = json.loads(
+            _tool_text(
+                await server.call_tool(
+                    "semantic_search",
+                    {"query": "original amber credential", "facet": "base"},
+                )
+            )
+        )
+        assert original["base_results"][0]["file_path"] == "auth.py"
+        assert original["base_results"][0]["change"] == "modified"
+
+    await workspace_cache.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("facet", "scope", "populated"),
+    [
+        ("changed", SearchScope.CHANGED, "changed_results"),
+        ("unchanged", SearchScope.UNCHANGED, "unchanged_results"),
+        ("base", SearchScope.BASE, "base_results"),
+    ],
+)
+async def test_semantic_search_facets_remove_noise_without_model_paths(
+    cache: _IndexCache,
+    tmp_path: Path,
+    facet: str,
+    scope: SearchScope,
+    populated: str,
+) -> None:
+    """Narrow facets retain one stable response schema and never accept repository context."""
+    server, _workspace_cache, session, _binding = _semantic_server(cache, tmp_path, scope=scope)
+
+    result = await server.call_tool(
+        "semantic_search",
+        {"query": "focused behavior", "facet": facet, "max_snippet_lines": 0},
+    )
+    payload = json.loads(_tool_text(result))
+
+    session.index.search.assert_called_once_with("focused behavior", scope=scope, top_k=5)
+    assert payload["index_context"]["facet"] == facet
+    assert payload[populated]
+    for section in {"changed_results", "unchanged_results", "base_results"} - {populated}:
+        assert not payload[section]
+
+
+@pytest.mark.anyio
+async def test_semantic_index_status_explains_coverage_and_changed_paths(
+    cache: _IndexCache,
+    tmp_path: Path,
+) -> None:
+    """Status makes current scope, exclusions, physical indexes, and freshness explicit."""
+    server, _workspace_cache, session, binding = _semantic_server(cache, tmp_path)
+
+    result = await server.call_tool("semantic_index_status", {"include_changed_paths": True})
+    context = json.loads(_tool_text(result))["index_context"]
+
+    session.synchronize.assert_awaited_once()
+    assert context["repository"] == binding.identity.repository
+    assert context["workspace_root"] == str(binding.workspace_root)
+    assert context["content"] == ["code"]
+    assert context["delta_index"]["changes_by_kind"]["modified"] == 1
+    assert context["changed_paths"] == [{"file_path": "changed.py", "change": "modified"}]
+    assert "paths outside the current workspace" in context["coverage"]["excluded"]
+
+
+@pytest.mark.anyio
+async def test_semantic_tool_catalog_is_unambiguous_and_context_bound(
+    cache: _IndexCache,
+    tmp_path: Path,
+) -> None:
+    """Agents see only descriptive semantic tools and cannot provide index identity."""
+    server, _workspace_cache, _session, _binding = _semantic_server(cache, tmp_path)
+
+    tools = {tool.name: tool for tool in await server.list_tools()}
+
+    assert set(tools) == {"semantic_search", "semantic_index_status"}
+    search = tools["semantic_search"]
+    assert "immutable baseline" in search.description
+    assert "private changed-file delta" in search.description
+    assert "read-your-writes" in search.description
+    assert set(search.inputSchema["properties"]) == {
+        "query",
+        "facet",
+        "top_k",
+        "max_snippet_lines",
+        "content",
     }
-    workspace_cache.release_workspace.assert_awaited_once_with(str(repo))
+    assert search.inputSchema["properties"]["facet"]["default"] == "workspace"
+    assert "old versions" in search.inputSchema["properties"]["facet"]["description"]
+
+
+@pytest.mark.anyio
+async def test_semantic_search_reports_binding_failure_instead_of_guessing(
+    cache: _IndexCache,
+) -> None:
+    """A server outside a bound Git workspace never asks the model for a path."""
+    server = create_server(cache, binding_error="not inside a Git workspace")
+
+    result = await server.call_tool("semantic_search", {"query": "anything"})
+    payload = json.loads(_tool_text(result))
+
+    assert payload["index_context"]["index_state"] == "error"
+    assert payload["index_context"]["workspace_root"] is None
+    assert "not inside a Git workspace" in payload["detail"]
 
 
 @pytest.mark.anyio
@@ -578,6 +608,7 @@ async def test_serve_runs_stdio(
     )
     with (
         patch("semble.mcp.load_model", **load_kwargs),
+        patch("semble.mcp.resolve_workspace_binding", side_effect=RuntimeError("not bound")),
         patch("mcp.server.fastmcp.FastMCP.run_stdio_async", side_effect=fake_stdio) as mock_run,
     ):
         await serve()
@@ -600,6 +631,7 @@ async def test_serve_opens_stdio_before_model_loads() -> None:
 
     with (
         patch("semble.mcp.load_model", side_effect=blocking_load_model),
+        patch("semble.mcp.resolve_workspace_binding", side_effect=RuntimeError("not bound")),
         patch("mcp.server.fastmcp.FastMCP.run_stdio_async", side_effect=fake_run_stdio),
     ):
         await serve()
@@ -635,23 +667,17 @@ async def test_index_cache_propagates_model_error(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("repo", "tool", "extra_args"),
+    "repo",
     [
-        ("file:///home/user/secret", "search", {"query": "foo"}),
-        ("ssh://internal-host/repo", "search", {"query": "foo"}),
-        ("git@github.com:org/repo", "search", {"query": "foo"}),
-        ("file:///home/user/secret", "find_related", {"file_path": "src/foo.py", "line": 1}),
-        ("ssh://internal-host/repo", "find_related", {"file_path": "src/foo.py", "line": 1}),
+        "file:///home/user/secret",
+        "ssh://internal-host/repo",
+        "git@github.com:org/repo",
     ],
-    ids=["file_search", "ssh_search", "scp_search", "file_find_related", "ssh_find_related"],
 )
-async def test_tool_rejects_unsafe_repo(
-    cache: _IndexCache, repo: str, tool: str, extra_args: dict[str, object]
-) -> None:
-    """Both tools reject unsafe git transport schemes (ssh://, file://, SCP-form) supplied as repo."""
-    server = create_server(cache)
-    result = await server.call_tool(tool, {**extra_args, "repo": repo})
-    assert "Only https://" in _tool_text(result)
+async def test_explicit_index_cache_rejects_unsafe_repo(cache: _IndexCache, repo: str) -> None:
+    """The retained non-agent cache helper still rejects unsafe Git transports."""
+    with pytest.raises(ValueError, match="Only https://"):
+        await _get_index(repo, cache, (ContentType.CODE,))
 
 
 @pytest.mark.anyio

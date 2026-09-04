@@ -12,6 +12,7 @@ from semble import (
     BaselineIdentity,
     BaselineRegistry,
     ChangeKind,
+    ContentType,
     SearchOrigin,
     SearchScope,
     SembleIndex,
@@ -185,6 +186,32 @@ def test_shared_baseline_isolated_between_worktrees_and_reference_counted(tmp_pa
     assert registry.evict_unused() == 1
 
 
+def test_shared_baseline_separates_content_index_variants(tmp_path: Path, mock_model) -> None:
+    """The same repository revision never reuses a code index for another content selection."""
+    base = tmp_path / "base"
+    _write_project(base)
+    identity = BaselineIdentity("example/content-variants", "e" * 40)
+    baseline = _baseline(base, mock_model)
+    registry = BaselineRegistry()
+    builds = 0
+
+    def build() -> SembleIndex:
+        nonlocal builds
+        builds += 1
+        return baseline
+
+    code = registry.acquire(identity, build, (ContentType.CODE,))
+    code_again = registry.acquire(identity, build, (ContentType.CODE,))
+    docs = registry.acquire(identity, build, (ContentType.DOCS,))
+
+    assert builds == 2
+    assert registry.references(identity) == 3
+    code.close()
+    code_again.close()
+    docs.close()
+    assert registry.evict_unused() == 2
+
+
 def test_rapid_edit_retries_until_file_snapshot_is_stable(tmp_path: Path, mock_model) -> None:
     """An edit that changes during embedding retries and publishes only the latest bytes."""
     _registry, _identity, _baseline_index, worktree, workspace = _workspace(tmp_path, mock_model)
@@ -259,7 +286,9 @@ async def test_workspace_watcher_applies_classified_event_and_releases_baseline(
     events: asyncio.Queue[set[tuple[Change, str]]] = asyncio.Queue()
     watcher_started = asyncio.Event()
 
-    async def fake_awatch(*_paths: Path, **_kwargs: object):  # type: ignore[no-untyped-def]
+    async def fake_awatch(*_paths: Path, **kwargs: object):  # type: ignore[no-untyped-def]
+        assert kwargs["debounce"] == 200
+        assert kwargs["step"] == 50
         watcher_started.set()
         yield await events.get()
         await asyncio.Future()
@@ -373,3 +402,79 @@ async def test_workspace_watcher_continues_after_transient_refresh_failure(tmp_p
         assert "auth.py" in workspace.changed_paths
         logger.warning.assert_called_once()
         await watcher.close()
+
+
+@pytest.mark.anyio
+async def test_workspace_synchronize_is_read_your_writes_and_skips_unchanged_delta(
+    tmp_path: Path,
+    mock_model,
+) -> None:
+    """An immediate synchronization publishes one edit once without waiting for watcher events."""
+    _registry, _identity, _baseline_index, worktree, workspace = _workspace(tmp_path, mock_model)
+    target = worktree / "auth.py"
+    target.write_text("def current_authentication():\n    return 'immediate violet marker'\n")
+    current = [WorkspaceFileChange("auth.py", ChangeKind.MODIFIED)]
+    watcher = WorkspaceWatcher(workspace, lambda _paths: [], reconcile=lambda: list(current))
+
+    with patch("semble.workspace.embed_chunks", wraps=real_embed_chunks) as embed:
+        await watcher.synchronize()
+        assert "auth.py" in _paths(workspace.search("immediate violet marker", scope=SearchScope.CHANGED).delta_results)
+        assert workspace.generation == 1
+        assert embed.call_count == 1
+
+        await watcher.synchronize()
+        assert workspace.generation == 1
+        assert embed.call_count == 1
+
+        target.write_text("def baseline_authentication():\n    return 'legacy amber token'\n")
+        current.clear()
+        await watcher.synchronize()
+        assert workspace.generation == 2
+        assert not workspace.changed_paths
+        assert "auth.py" in _paths(workspace.search("legacy amber token", scope=SearchScope.UNCHANGED).base_results)
+
+    await watcher.close()
+
+
+@pytest.mark.anyio
+async def test_workspace_synchronize_batches_fifty_files_into_one_delta_generation(
+    tmp_path: Path,
+    mock_model,
+) -> None:
+    """One multi-file tool action embeds fifty changed files and publishes the delta once."""
+    baseline_root = tmp_path / "base"
+    worktree = tmp_path / "worktree"
+    baseline_root.mkdir()
+    for slot in range(50):
+        (baseline_root / f"module_{slot:02d}.py").write_text(
+            f"def baseline_{slot:02d}():\n    return 'baseline marker {slot:02d}'\n"
+        )
+    shutil.copytree(baseline_root, worktree)
+    identity = BaselineIdentity("example/fifty-files", "d" * 40)
+    registry = BaselineRegistry()
+    workspace = WorkspaceIndex(
+        registry.acquire(identity, lambda: _baseline(baseline_root, mock_model)),
+        worktree,
+    )
+    changes = []
+    for slot in range(50):
+        relative = f"module_{slot:02d}.py"
+        (worktree / relative).write_text(f"def changed_{slot:02d}():\n    return 'delta marker {slot:02d}'\n")
+        changes.append(WorkspaceFileChange(relative, ChangeKind.MODIFIED))
+    watcher = WorkspaceWatcher(workspace, lambda _paths: [], reconcile=lambda: list(changes))
+
+    with patch("semble.workspace.embed_chunks", wraps=real_embed_chunks) as embed:
+        await watcher.synchronize()
+        assert embed.call_count == 50
+        assert workspace.generation == 1
+        assert workspace.delta_file_count == 50
+        assert workspace.shadowed_file_count == 50
+        assert "module_49.py" in _paths(
+            workspace.search("delta marker 49", scope=SearchScope.CHANGED, top_k=50).delta_results
+        )
+
+        await watcher.synchronize()
+        assert embed.call_count == 50
+        assert workspace.generation == 1
+
+    await watcher.close()

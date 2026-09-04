@@ -1,9 +1,11 @@
 from semble.git_workspace import (
     GitChangeClassifier,
     GitWorkspaceSession,
+    WorkspaceBinding,
     fetch_remote_baseline,
     open_git_workspace,
     resolve_revision,
+    resolve_workspace_binding,
 )
 from semble.index import SembleIndex
 from semble.types import Chunk, ContentType, EmbeddingMatrix, IndexStats, SearchResult
@@ -27,6 +29,7 @@ __all__ = [
     "ChangeKind",
     "GitChangeClassifier",
     "GitWorkspaceSession",
+    "WorkspaceBinding",
     "Chunk",
     "ContentType",
     "EmbeddingMatrix",
@@ -38,6 +41,7 @@ __all__ = [
     "fetch_remote_baseline",
     "resolve_revision",
     "open_git_workspace",
+    "resolve_workspace_binding",
     "WorkspaceFileChange",
     "WorkspaceIndex",
     "WorkspaceSearchHit",

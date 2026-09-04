@@ -79,7 +79,7 @@ def main() -> None:
 def _mcp_main() -> None:
     parser = argparse.ArgumentParser(
         prog="semble",
-        description="Instant local code search for agents.",
+        description="Context-bound semantic search for the current Git workspace.",
     )
     _add_content_args(parser)
     args = parser.parse_args()
