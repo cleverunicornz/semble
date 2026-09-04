@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import threading
 from collections.abc import Callable, Collection, Sequence
@@ -24,7 +25,8 @@ from semble.search import PreparedQuery, search_prepared
 from semble.tokens import tokenize
 from semble.types import Chunk, ContentType, EmbeddingMatrix, SearchResult
 
-_WATCH_DEBOUNCE_MS = 200
+WORKSPACE_WATCH_DEBOUNCE_MS = 200
+WORKSPACE_WATCH_STEP_MS = 50
 _STABLE_READ_ATTEMPTS = 3
 _SEARCH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="semble-workspace-search")
 logger = logging.getLogger(__name__)
@@ -138,13 +140,22 @@ class _BaselineEntry:
     references: int = 0
 
 
+_BaselineKey = tuple[BaselineIdentity, tuple[ContentType, ...]]
+
+
 class BaselineLease:
     """Reference-counted handle to one immutable baseline index."""
 
-    def __init__(self, registry: BaselineRegistry, identity: BaselineIdentity, index: SembleIndex) -> None:
+    def __init__(
+        self,
+        registry: BaselineRegistry,
+        key: _BaselineKey,
+        index: SembleIndex,
+    ) -> None:
         """Create one live handle owned by the registry."""
         self._registry = registry
-        self.identity = identity
+        self._key = key
+        self.identity = key[0]
         self.index = index
         self._closed = False
 
@@ -153,7 +164,7 @@ class BaselineLease:
         if self._closed:
             return
         self._closed = True
-        self._registry.release(self.identity)
+        self._registry._release(self._key)
 
     def __enter__(self) -> BaselineLease:
         """Return this lease as a context manager."""
@@ -165,43 +176,48 @@ class BaselineLease:
 
 
 class BaselineRegistry:
-    """Process-local immutable baseline cache keyed by repository and revision."""
+    """Process-local immutable baseline cache keyed by identity and content variant."""
 
     def __init__(self) -> None:
         """Create an empty process-local baseline registry."""
-        self._entries: dict[BaselineIdentity, _BaselineEntry] = {}
+        self._entries: dict[_BaselineKey, _BaselineEntry] = {}
         self._lock = threading.RLock()
 
-    def acquire(self, identity: BaselineIdentity, build: Callable[[], SembleIndex]) -> BaselineLease:
-        """Return one shared baseline and increment its active reference count."""
+    def acquire(
+        self,
+        identity: BaselineIdentity,
+        build: Callable[[], SembleIndex],
+        content: Sequence[ContentType] = (),
+    ) -> BaselineLease:
+        """Return one shared exact-content baseline and increment its reference count."""
+        key = (identity, tuple(content))
         with self._lock:
-            entry = self._entries.get(identity)
+            entry = self._entries.get(key)
             if entry is None:
                 entry = _BaselineEntry(index=build())
-                self._entries[identity] = entry
+                self._entries[key] = entry
             entry.references += 1
-            return BaselineLease(self, identity, entry.index)
+            return BaselineLease(self, key, entry.index)
 
-    def release(self, identity: BaselineIdentity) -> None:
-        """Release one active baseline reference while retaining its cached index."""
+    def _release(self, key: _BaselineKey) -> None:
+        """Release one exact baseline reference while retaining its cached index."""
         with self._lock:
-            entry = self._entries.get(identity)
+            entry = self._entries.get(key)
             if entry is None or entry.references == 0:
-                raise ValueError(f"Baseline {identity!r} has no active reference")
+                raise ValueError(f"Baseline {key!r} has no active reference")
             entry.references -= 1
 
     def references(self, identity: BaselineIdentity) -> int:
-        """Return the active reference count for a baseline."""
+        """Return active references across every content variant for an identity."""
         with self._lock:
-            entry = self._entries.get(identity)
-            return 0 if entry is None else entry.references
+            return sum(entry.references for key, entry in self._entries.items() if key[0] == identity)
 
     def evict_unused(self) -> int:
-        """Remove every unreferenced baseline and return the number evicted."""
+        """Remove every unreferenced baseline variant and return the number evicted."""
         with self._lock:
-            unused = [identity for identity, entry in self._entries.items() if entry.references == 0]
-            for identity in unused:
-                del self._entries[identity]
+            unused = [key for key, entry in self._entries.items() if entry.references == 0]
+            for key in unused:
+                del self._entries[key]
             return len(unused)
 
 
@@ -210,6 +226,8 @@ class _OverlayFile:
     chunks: tuple[Chunk, ...]
     vectors: EmbeddingMatrix
     change: ChangeKind
+    mtime_ns: int
+    size: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +253,7 @@ class WorkspaceIndex:
         self._changes: dict[str, ChangeKind] = {}
         self._shadowed_paths: set[str] = set()
         self._overlay: _OverlaySnapshot | None = None
+        self._generation = 0
         self._lock = threading.RLock()
         self._closed = False
 
@@ -248,6 +267,45 @@ class WorkspaceIndex:
         """Return a copy of current path states relative to the baseline."""
         with self._lock:
             return dict(self._changes)
+
+    @property
+    def content(self) -> tuple[ContentType, ...]:
+        """Return the content classes covered by both physical indexes."""
+        return self._content
+
+    @property
+    def baseline_file_count(self) -> int:
+        """Return the number of files represented by the immutable baseline."""
+        return len(self._baseline_paths)
+
+    @property
+    def baseline_chunk_count(self) -> int:
+        """Return the number of chunks represented by the immutable baseline."""
+        return len(self.baseline.index.chunks)
+
+    @property
+    def delta_file_count(self) -> int:
+        """Return the number of changed files with searchable delta content."""
+        with self._lock:
+            return len(self._overlay_files)
+
+    @property
+    def delta_chunk_count(self) -> int:
+        """Return the number of chunks represented by the mutable delta."""
+        with self._lock:
+            return 0 if self._overlay is None else len(self._overlay.chunks)
+
+    @property
+    def generation(self) -> int:
+        """Return the monotonically increasing published delta generation."""
+        with self._lock:
+            return self._generation
+
+    @property
+    def shadowed_file_count(self) -> int:
+        """Return the number of baseline paths hidden from the effective workspace."""
+        with self._lock:
+            return len(self._shadowed_paths)
 
     def _relative_path(self, value: str | Path) -> str:
         path = Path(value)
@@ -273,7 +331,7 @@ class WorkspaceIndex:
             vectors = embed_chunks(self.baseline.index.model, chunks)
             after = path.stat()
             if (before.st_mtime_ns, before.st_size) == (after.st_mtime_ns, after.st_size):
-                return _OverlayFile(tuple(chunks), vectors, change)
+                return _OverlayFile(tuple(chunks), vectors, change, after.st_mtime_ns, after.st_size)
         raise RuntimeError(f"Workspace file kept changing while indexed: {relative}")
 
     @staticmethod
@@ -305,36 +363,52 @@ class WorkspaceIndex:
             overlay_files = dict(self._overlay_files)
             current_changes = dict(self._changes)
             shadowed_paths = set(self._shadowed_paths)
+            overlay_changed = False
             for change in changes:
                 relative = self._relative_path(change.path)
                 if change.kind is ChangeKind.UNCHANGED:
                     current_changes.pop(relative, None)
                     shadowed_paths.discard(relative)
-                    overlay_files.pop(relative, None)
+                    overlay_changed = overlay_files.pop(relative, None) is not None or overlay_changed
                     continue
                 if change.kind is ChangeKind.RENAMED:
                     previous = self._relative_path(change.previous_path or "")
                     current_changes[previous] = ChangeKind.DELETED
                     shadowed_paths.add(previous)
-                    overlay_files.pop(previous, None)
+                    overlay_changed = overlay_files.pop(previous, None) is not None or overlay_changed
                 if change.kind is ChangeKind.DELETED:
                     current_changes[relative] = ChangeKind.DELETED
                     shadowed_paths.add(relative)
-                    overlay_files.pop(relative, None)
+                    overlay_changed = overlay_files.pop(relative, None) is not None or overlay_changed
                     continue
                 current_changes[relative] = change.kind
                 if relative in self._baseline_paths:
                     shadowed_paths.add(relative)
+                existing = overlay_files.get(relative)
+                path = self.root / relative
+                with contextlib.suppress(OSError):
+                    stat = path.stat()
+                    if (
+                        existing is not None
+                        and existing.change is change.kind
+                        and existing.mtime_ns == stat.st_mtime_ns
+                        and existing.size == stat.st_size
+                    ):
+                        continue
                 overlay_file = self._index_file(relative, change.kind)
                 if overlay_file is None:
-                    overlay_files.pop(relative, None)
+                    overlay_changed = overlay_files.pop(relative, None) is not None or overlay_changed
                 else:
                     overlay_files[relative] = overlay_file
-            overlay = self._build_overlay(overlay_files)
+                    overlay_changed = True
+            overlay = self._build_overlay(overlay_files) if overlay_changed else self._overlay
+            state_changed = current_changes != self._changes or shadowed_paths != self._shadowed_paths
             self._overlay_files = overlay_files
             self._changes = current_changes
             self._shadowed_paths = shadowed_paths
             self._overlay = overlay
+            if overlay_changed or state_changed:
+                self._generation += 1
 
     def reconcile_changes(self, changes: Sequence[WorkspaceFileChange]) -> None:
         """Replace current delta membership with one authoritative change snapshot."""
@@ -460,12 +534,15 @@ class WorkspaceWatcher:
         workspace: WorkspaceIndex,
         classify: Callable[[Collection[Path]], Sequence[WorkspaceFileChange]],
         full_reconcile: Callable[[Collection[Path]], bool] | None = None,
+        reconcile: Callable[[], Sequence[WorkspaceFileChange]] | None = None,
     ) -> None:
         """Create a watcher using the caller's authoritative change classifier."""
         self.workspace = workspace
         self.classify = classify
         self.full_reconcile = full_reconcile
+        self.reconcile = reconcile
         self._task: asyncio.Task[None] | None = None
+        self._refresh_lock = asyncio.Lock()
 
     def start(self) -> None:
         """Start watching exactly once."""
@@ -474,18 +551,31 @@ class WorkspaceWatcher:
         self._task = asyncio.create_task(self._run(), name=f"semble-workspace-watch:{self.workspace.root}")
 
     async def _run(self) -> None:
-        async for changes in awatch(self.workspace.root, debounce=_WATCH_DEBOUNCE_MS, step=50):
+        async for changes in awatch(
+            self.workspace.root,
+            debounce=WORKSPACE_WATCH_DEBOUNCE_MS,
+            step=WORKSPACE_WATCH_STEP_MS,
+        ):
             try:
                 paths = {Path(path) for _change, path in changes}
-                classified = await asyncio.to_thread(self.classify, paths)
-                if self.full_reconcile is not None and self.full_reconcile(paths):
-                    await asyncio.to_thread(self.workspace.reconcile_changes, classified)
-                elif classified:
-                    await asyncio.to_thread(self.workspace.apply_changes, classified)
+                async with self._refresh_lock:
+                    classified = await asyncio.to_thread(self.classify, paths)
+                    if self.full_reconcile is not None and self.full_reconcile(paths):
+                        await asyncio.to_thread(self.workspace.reconcile_changes, classified)
+                    elif classified:
+                        await asyncio.to_thread(self.workspace.apply_changes, classified)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.warning("Failed to refresh workspace delta; watching continues", exc_info=True)
+
+    async def synchronize(self) -> None:
+        """Publish all current Git changes before a read-your-writes search."""
+        if self.reconcile is None:
+            return
+        async with self._refresh_lock:
+            classified = await asyncio.to_thread(self.reconcile)
+            await asyncio.to_thread(self.workspace.reconcile_changes, classified)
 
     async def close(self) -> None:
         """Stop the watcher and release the workspace overlay."""

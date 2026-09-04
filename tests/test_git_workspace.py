@@ -16,6 +16,7 @@ from semble import (
     fetch_remote_baseline,
     open_git_workspace,
     resolve_revision,
+    resolve_workspace_binding,
 )
 
 
@@ -92,6 +93,46 @@ def test_fetch_remote_baseline_pins_remote_commit_without_moving_checkout(tmp_pa
     assert _git(checkout, "rev-parse", "HEAD") == checkout_head
 
 
+def test_resolve_workspace_binding_uses_clean_primary_checkout(tmp_path: Path) -> None:
+    """A Paseo-style linked worktree reuses its clean immutable primary checkout."""
+    primary = tmp_path / "primary"
+    worktree = tmp_path / "worktree"
+    revision = _init_repository(primary)
+    _git(primary, "remote", "add", "origin", "https://github.com/example/project.git")
+    _git(primary, "worktree", "add", "-b", "agent-task", str(worktree), revision)
+
+    binding = resolve_workspace_binding(worktree, tmp_path / "cache")
+
+    assert binding.workspace_root == worktree.resolve()
+    assert binding.baseline_root == primary.resolve()
+    assert binding.identity == BaselineIdentity("https://github.com/example/project.git", revision)
+    assert binding.branch == "agent-task"
+    assert binding.baseline_source == "primary_checkout"
+
+
+def test_resolve_workspace_binding_materializes_exact_nonprimary_revision(tmp_path: Path) -> None:
+    """A branch commit gets one reusable clean baseline without mutating the worktree."""
+    primary = tmp_path / "primary"
+    worktree = tmp_path / "worktree"
+    base = _init_repository(primary)
+    _git(primary, "remote", "add", "origin", "https://github.com/example/project.git")
+    _git(primary, "worktree", "add", "-b", "agent-task", str(worktree), base)
+    (worktree / "auth.py").write_text("def authenticate():\n    return 'committed branch state'\n")
+    _git(worktree, "add", "auth.py")
+    _git(worktree, "commit", "-m", "branch baseline")
+    revision = _git(worktree, "rev-parse", "HEAD")
+
+    first = resolve_workspace_binding(worktree, tmp_path / "cache")
+    second = resolve_workspace_binding(worktree, tmp_path / "cache")
+
+    assert first == second
+    assert first.baseline_source == "materialized_revision"
+    assert first.baseline_root not in {primary.resolve(), worktree.resolve()}
+    assert _git(first.baseline_root, "rev-parse", "HEAD") == revision
+    assert _git(first.baseline_root, "status", "--porcelain") == ""
+    assert _git(worktree, "rev-parse", "HEAD") == revision
+
+
 @pytest.mark.anyio
 async def test_open_git_workspace_requires_clean_base_and_indexes_existing_delta(tmp_path: Path, mock_model) -> None:
     """A session verifies its base, attaches it once, and indexes the current Git delta before readiness."""
@@ -123,6 +164,10 @@ async def test_open_git_workspace_requires_clean_base_and_indexes_existing_delta
     }
     changed = session.index.search("workspace violet marker", scope=SearchScope.CHANGED)
     assert changed.delta_results[0].result.chunk.file_path == "auth.py"
+    (worktree / "auth.py").write_text("def authenticate():\n    return 'immediate synchronized marker'\n")
+    await session.synchronize()
+    synchronized = session.index.search("immediate synchronized marker", scope=SearchScope.CHANGED)
+    assert synchronized.delta_results[0].result.chunk.file_path == "auth.py"
     assert registry.references(identity) == 1
     await session.close()
     assert registry.references(identity) == 0

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import os
+import shutil
 import subprocess
+import time
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from semble.index import SembleIndex
@@ -18,6 +22,18 @@ from semble.workspace import (
 
 _INDEX_RULE_FILES = frozenset({".gitignore", ".sembleignore"})
 _GIT_TIMEOUT_SECONDS = 60
+_BASELINE_MATERIALIZE_TIMEOUT_SECONDS = 120
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceBinding:
+    """Server-owned identity for one current workspace and immutable baseline."""
+
+    workspace_root: Path
+    baseline_root: Path
+    identity: BaselineIdentity
+    branch: str | None
+    baseline_source: str
 
 
 def _git(root: Path, *args: str) -> bytes:
@@ -105,6 +121,95 @@ def _parse_name_status(raw: bytes) -> list[WorkspaceFileChange]:
         }.get(code, ChangeKind.MODIFIED)
         changes.append(WorkspaceFileChange(path=path, kind=kind))
     return changes
+
+
+def _git_text(root: Path, *args: str) -> str:
+    return os.fsdecode(_git(root, *args)).strip()
+
+
+def _is_clean_revision(root: Path, revision: str) -> bool:
+    try:
+        return resolve_revision(root, "HEAD") == revision and not GitChangeClassifier(root, revision).all_changes()
+    except (OSError, RuntimeError):
+        return False
+
+
+def _materialize_baseline(workspace: Path, repository: str, revision: str, cache_root: Path) -> Path:
+    key = hashlib.sha256(f"{repository}\0{revision}".encode()).hexdigest()
+    root = cache_root / "_workspace_baselines"
+    target = root / key
+    root.mkdir(parents=True, exist_ok=True)
+    if _is_clean_revision(target, revision):
+        return target
+
+    lock = root / f".{key}.lock"
+    deadline = time.monotonic() + _BASELINE_MATERIALIZE_TIMEOUT_SECONDS
+    while True:
+        try:
+            lock.mkdir()
+            break
+        except FileExistsError:
+            if _is_clean_revision(target, revision):
+                return target
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Timed out materializing immutable baseline {revision}")
+            time.sleep(0.05)
+
+    temporary = root / f".{key}.tmp-{os.getpid()}"
+    try:
+        if _is_clean_revision(target, revision):
+            return target
+        shutil.rmtree(temporary, ignore_errors=True)
+        result = subprocess.run(
+            ["git", "clone", "--shared", "--no-checkout", "--", str(workspace), str(temporary)],
+            check=False,
+            capture_output=True,
+            timeout=_BASELINE_MATERIALIZE_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            detail = os.fsdecode(result.stderr).strip()
+            raise RuntimeError(f"Failed to materialize immutable baseline: {detail}")
+        _git(temporary, "checkout", "--detach", revision)
+        _git(temporary, "remote", "remove", "origin")
+        if not _is_clean_revision(temporary, revision):
+            raise RuntimeError(f"Materialized baseline {revision} is not clean")
+        if target.exists():
+            shutil.rmtree(target)
+        temporary.replace(target)
+        return target
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+        lock.rmdir()
+
+
+def resolve_workspace_binding(workspace_root: str | Path, cache_root: str | Path) -> WorkspaceBinding:
+    """Bind a server process to one Git workspace without model-supplied paths."""
+    requested = Path(workspace_root).resolve()
+    workspace = Path(_git_text(requested, "rev-parse", "--show-toplevel")).resolve()
+    revision = resolve_revision(workspace, "HEAD")
+    repository = _git_text(workspace, "remote", "get-url", "origin")
+    if not repository:
+        raise RuntimeError("The current Git workspace has no origin repository identity")
+    try:
+        branch = _git_text(workspace, "symbolic-ref", "--quiet", "--short", "HEAD") or None
+    except RuntimeError:
+        branch = None
+
+    common_dir = Path(_git_text(workspace, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
+    primary = common_dir.parent if common_dir.name == ".git" else workspace
+    if _is_clean_revision(primary, revision):
+        baseline = primary
+        baseline_source = "primary_checkout"
+    else:
+        baseline = _materialize_baseline(workspace, repository, revision, Path(cache_root).resolve())
+        baseline_source = "materialized_revision"
+    return WorkspaceBinding(
+        workspace_root=workspace,
+        baseline_root=baseline,
+        identity=BaselineIdentity(repository, revision),
+        branch=branch,
+        baseline_source=baseline_source,
+    )
 
 
 class GitChangeClassifier:
@@ -219,11 +324,20 @@ class GitWorkspaceSession:
         """Create a stopped session around an initialized workspace index."""
         self.index = index
         self.classifier = classifier
-        self.watcher = WorkspaceWatcher(index, classifier.classify, classifier.requires_full_reconcile)
+        self.watcher = WorkspaceWatcher(
+            index,
+            classifier.classify,
+            classifier.requires_full_reconcile,
+            classifier.all_changes,
+        )
 
     def start(self) -> None:
         """Start watcher-driven delta maintenance."""
         self.watcher.start()
+
+    async def synchronize(self) -> None:
+        """Publish every Git-visible workspace change before searching."""
+        await self.watcher.synchronize()
 
     async def close(self) -> None:
         """Stop watching, drop the overlay, and release the shared baseline."""
@@ -255,7 +369,7 @@ def open_git_workspace(
         save_index_to_cache(index, str(baseline_path))
         return index
 
-    lease = registry.acquire(identity, build_baseline)
+    lease = registry.acquire(identity, build_baseline, content)
     try:
         workspace = WorkspaceIndex(lease, workspace_path)
         workspace.reconcile_changes(classifier.all_changes())
