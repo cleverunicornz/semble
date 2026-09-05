@@ -22,6 +22,17 @@ def _write_files(root: Path, files: dict[str, str]) -> None:
 
 def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path: Path) -> None:
     """One incremental pass reuses unchanged vectors, re-embeds changes, and keeps BM25 slots current."""
+    encoded_texts: list[str] = []
+    encoded_vector_parts: list[np.ndarray] = []
+    original_encode = mock_model.encode.side_effect
+
+    def tracking_encode(texts: list[str], **kwargs: Any) -> np.ndarray:
+        vectors = original_encode(texts, **kwargs)
+        encoded_texts.extend(texts)
+        encoded_vector_parts.append(vectors.copy())
+        return vectors
+
+    mock_model.encode.side_effect = tracking_encode
     _write_files(
         tmp_path,
         {
@@ -34,6 +45,11 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
     bm25_before, semantic_before, chunks_before, manifest_before = create_index_from_path(
         tmp_path, mock_model, display_root=tmp_path
     )
+    fresh_calls = list(mock_model.encode.call_args_list)
+    assert mock_model.encode.call_count == 4  # once per file, no second full pass
+    assert sum(len(call.args[0]) for call in fresh_calls) == len(chunks_before)
+    assert encoded_texts == [chunk.content for chunk in chunks_before]
+    np.testing.assert_array_equal(semantic_before.vectors, np.vstack(encoded_vector_parts))
     a_entry = manifest_before["a.py"]
     b_entry = manifest_before["b.py"]
     a_vectors_before = semantic_before.vectors[a_entry.start : a_entry.end].copy()
@@ -85,6 +101,31 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
         for slot in range(entry.count)
     }
     assert set(bm25_after.doc_order) == expected_ids
+
+
+def test_fresh_index_stacks_zero_chunk_vector_part(mock_model: Any, tmp_path: Path) -> None:
+    """A valid zero-chunk file keeps its empty vector part beside a nonempty file."""
+    _write_files(
+        tmp_path,
+        {
+            "empty.py": " " * 128,
+            "live.py": "def live_value():\n    return 1\n",
+        },
+    )
+
+    bm25_index, semantic_index, chunks, manifest = create_index_from_path(
+        tmp_path,
+        mock_model,
+        display_root=tmp_path,
+    )
+
+    assert manifest["empty.py"].count == 0
+    assert chunks
+    assert all(chunk.file_path == "live.py" for chunk in chunks)
+    assert semantic_index.vectors.shape == (len(chunks), mock_model.dim)
+    assert len(bm25_index.doc_order) == len(chunks)
+    assert mock_model.encode.call_count == 1
+    assert mock_model.encode.call_args.args[0] == [chunk.content for chunk in chunks]
 
 
 def _build_valid_cache(index_path: Path, mock_model: Any) -> dict:
