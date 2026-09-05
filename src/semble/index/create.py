@@ -66,6 +66,25 @@ def _has_same_vector_layout(
     )
 
 
+def _assemble_final_embeddings(
+    model: StaticModel,
+    chunks: list[Chunk],
+    manifest: dict[str, FileManifestEntry],
+    previous: PreviousIndex | None,
+    vector_parts: list[EmbeddingMatrix],
+    embedding_parts: list[tuple[int, int, int]],
+) -> EmbeddingMatrix:
+    """Embed a fresh corpus globally or assemble its incremental vector parts."""
+    if previous is None:
+        return embed_chunks(model, chunks)
+    if _has_same_vector_layout(manifest, previous.manifest):
+        embeddings = previous.vectors
+        for vector_part, start, count in embedding_parts:
+            embeddings[start : start + count] = vector_parts[vector_part]
+        return embeddings
+    return np.vstack(vector_parts)
+
+
 def create_index_from_path(
     path: Path,
     model: StaticModel,
@@ -136,14 +155,7 @@ def create_index_from_path(
     if not chunks:
         raise ValueError(f"No supported files found under {path}.")
 
-    if previous is None:
-        embeddings = embed_chunks(model, chunks)
-    elif _has_same_vector_layout(manifest, previous_manifest):
-        embeddings = previous.vectors
-        for vector_part, start, count in embedding_parts:
-            embeddings[start : start + count] = vector_parts[vector_part]
-    else:
-        embeddings = np.vstack(vector_parts)
+    embeddings = _assemble_final_embeddings(model, chunks, manifest, previous, vector_parts, embedding_parts)
     bm25_index.set_doc_order(chunk_ids)
     semantic_index = SelectableBasicBackend(embeddings, BasicArgs())
 
