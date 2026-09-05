@@ -175,8 +175,7 @@ def _summarize_embedding_invariants(records: Sequence[Mapping[str, Any]]) -> dic
         "encoded_texts_equal_unique_chunks",
     )
     if not records or any(
-        not isinstance(record.get("counts"), Mapping)
-        or any(name not in record["counts"] for name in names)
+        not isinstance(record.get("counts"), Mapping) or any(name not in record["counts"] for name in names)
         for record in records
     ):
         return {}

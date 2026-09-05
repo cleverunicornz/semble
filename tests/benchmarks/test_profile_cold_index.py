@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
 from benchmarks.profile_cold_index import (
-    _PhaseRecorder,
     _embedding_counters,
+    _PhaseRecorder,
     _summarize_records,
 )
 

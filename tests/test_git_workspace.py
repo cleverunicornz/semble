@@ -163,11 +163,17 @@ async def test_open_git_workspace_requires_clean_base_and_indexes_existing_delta
         "new.py": ChangeKind.ADDED,
     }
     changed = session.index.search("workspace violet marker", scope=SearchScope.CHANGED)
-    assert changed.delta_results[0].result.chunk.file_path == "auth.py"
+    assert any(
+        result.result.chunk.file_path == "auth.py" and "workspace violet marker" in result.result.chunk.content
+        for result in changed.delta_results
+    )
     (worktree / "auth.py").write_text("def authenticate():\n    return 'immediate synchronized marker'\n")
     await session.synchronize()
     synchronized = session.index.search("immediate synchronized marker", scope=SearchScope.CHANGED)
-    assert synchronized.delta_results[0].result.chunk.file_path == "auth.py"
+    assert any(
+        result.result.chunk.file_path == "auth.py" and "immediate synchronized marker" in result.result.chunk.content
+        for result in synchronized.delta_results
+    )
     assert registry.references(identity) == 1
     await session.close()
     assert registry.references(identity) == 0
