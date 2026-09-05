@@ -10,7 +10,7 @@ import pytest
 from model2vec import StaticModel
 from watchfiles import Change
 
-from semble.git_workspace import WorkspaceBinding
+from semble.git_workspace import WorkspaceBinding, resolve_workspace_binding
 from semble.mcp import _CACHE_MAX_SIZE, _get_index, _IndexCache, _WorkspaceCache, create_server, serve
 from semble.types import Chunk, ContentType, SearchResult
 from semble.utils import format_results, is_git_url, resolve_chunk
@@ -456,6 +456,67 @@ async def test_semantic_search_immediate_first_call_reads_new_workspace_bytes(
         )
         assert original["base_results"][0]["file_path"] == "auth.py"
         assert original["base_results"][0]["change"] == "modified"
+
+    await workspace_cache.close()
+
+
+@pytest.mark.anyio
+async def test_semantic_session_rebinds_after_clean_committed_head_advance(
+    cache: _IndexCache,
+    tmp_path: Path,
+    mock_model: StaticModel,
+) -> None:
+    """A long-lived MCP process adopts agent commits before its next semantic call."""
+    origin = tmp_path / "origin"
+    workspace = tmp_path / "workspace"
+    cache_root = tmp_path / "cache"
+    subprocess.run(["git", "init", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(origin), "config", "user.name", "Semble Test"], check=True)
+    subprocess.run(["git", "-C", str(origin), "config", "user.email", "semble@example.invalid"], check=True)
+    (origin / "service.py").write_text("def marker():\n    return 'initial amber contract'\n")
+    subprocess.run(["git", "-C", str(origin), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(origin), "commit", "-m", "initial"], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(origin), str(workspace)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(workspace), "config", "user.name", "Semble Test"], check=True)
+    subprocess.run(["git", "-C", str(workspace), "config", "user.email", "semble@example.invalid"], check=True)
+
+    initial_binding = resolve_workspace_binding(workspace, cache_root)
+    workspace_cache = _WorkspaceCache(cache)
+    server = create_server(
+        cache,
+        workspace_cache=workspace_cache,
+        binding=initial_binding,
+        binding_resolver=lambda: resolve_workspace_binding(workspace, cache_root),
+    )
+
+    with (
+        patch("semble.index.index.load_model", return_value=(mock_model, "/fake/model")),
+        patch("semble.cache.save_index_to_cache"),
+    ):
+        initial = json.loads(_tool_text(await server.call_tool("semantic_index_status", {})))
+        assert initial["index_context"]["baseline_revision"] == initial_binding.identity.revision
+
+        (workspace / "service.py").write_text("def marker():\n    return 'committed violet contract'\n")
+        subprocess.run(["git", "-C", str(workspace), "add", "service.py"], check=True)
+        subprocess.run(["git", "-C", str(workspace), "commit", "-m", "advance"], check=True, capture_output=True)
+        advanced_revision = subprocess.run(
+            ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        advanced = json.loads(_tool_text(await server.call_tool("semantic_index_status", {})))
+        assert advanced["index_context"]["baseline_revision"] == advanced_revision
+        assert advanced["index_context"]["delta_index"]["changed_paths"] == 0
+
+        (workspace / "service.py").write_text("def marker():\n    return 'uncommitted cobalt contract'\n")
+        current = json.loads(
+            _tool_text(await server.call_tool("semantic_search", {"query": "uncommitted cobalt contract"}))
+        )
+        assert current["changed_results"][0]["file_path"] == "service.py"
+        assert current["index_context"]["baseline_revision"] == advanced_revision
+        assert current["index_context"]["read_your_writes"] is True
 
     await workspace_cache.close()
 
