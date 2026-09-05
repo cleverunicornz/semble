@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -8,9 +9,10 @@ import pytest
 
 from semble.cache import load_previous_for_incremental
 from semble.index.create import create_index_from_path
+from semble.index.dense import embed_chunks as real_embed_chunks
 from semble.index.index import SembleIndex
 from semble.index.types import PreviousIndex, make_chunk_id
-from semble.types import ContentType
+from semble.types import Chunk, ContentType
 
 
 def _write_files(root: Path, files: dict[str, str]) -> None:
@@ -18,6 +20,36 @@ def _write_files(root: Path, files: dict[str, str]) -> None:
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
+
+
+class _BatchLongestModel:
+    """Deterministic nonzero-PAD model whose vectors depend on the encode batch width."""
+
+    dim = 2
+    _PAD_VECTOR = np.array([11.0, -7.0], dtype=np.float32)
+
+    def __init__(self) -> None:
+        """Create an empty encode-call log."""
+        self.calls: list[list[str]] = []
+
+    def encode(self, texts: Sequence[str], **_kwargs: Any) -> np.ndarray:
+        """Mean token and PAD vectors after BatchLongest-style padding, then normalize."""
+        self.calls.append(list(texts))
+        token_rows = [
+            np.array(
+                [[len(token), sum(token.encode("utf-8")) % 17 + 1] for token in text.split()],
+                dtype=np.float32,
+            )
+            for text in texts
+        ]
+        batch_width = max(len(row) for row in token_rows)
+        means = []
+        for row in token_rows:
+            padding = np.tile(self._PAD_VECTOR, (batch_width - len(row), 1))
+            means.append(np.vstack((row, padding)).mean(axis=0, dtype=np.float32))
+        vectors = np.stack(means).astype(np.float32)
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True) + np.float32(1e-12)
+        return np.asarray(vectors / norms, dtype=np.float32)
 
 
 def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path: Path) -> None:
@@ -42,14 +74,18 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
             "emptying.py": "def becomes_empty():\n    return 4\n",
         },
     )
-    bm25_before, semantic_before, chunks_before, manifest_before = create_index_from_path(
-        tmp_path, mock_model, display_root=tmp_path
-    )
+    with patch("semble.index.create.embed_chunks", wraps=real_embed_chunks) as embed:
+        bm25_before, semantic_before, chunks_before, manifest_before = create_index_from_path(
+            tmp_path, mock_model, display_root=tmp_path
+        )
     fresh_calls = list(mock_model.encode.call_args_list)
-    assert mock_model.encode.call_count == 4  # once per file, no second full pass
+    embed.assert_called_once()
+    assert embed.call_args.args == (mock_model, chunks_before)
+    assert mock_model.encode.call_count == 1
     assert sum(len(call.args[0]) for call in fresh_calls) == len(chunks_before)
+    assert fresh_calls[0].args[0] == [chunk.content for chunk in chunks_before]
     assert encoded_texts == [chunk.content for chunk in chunks_before]
-    np.testing.assert_array_equal(semantic_before.vectors, np.vstack(encoded_vector_parts))
+    np.testing.assert_array_equal(semantic_before.vectors, encoded_vector_parts[0])
     a_entry = manifest_before["a.py"]
     b_entry = manifest_before["b.py"]
     a_vectors_before = semantic_before.vectors[a_entry.start : a_entry.end].copy()
@@ -103,8 +139,8 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
     assert set(bm25_after.doc_order) == expected_ids
 
 
-def test_fresh_index_stacks_zero_chunk_vector_part(mock_model: Any, tmp_path: Path) -> None:
-    """A valid zero-chunk file keeps its empty vector part beside a nonempty file."""
+def test_fresh_index_keeps_valid_zero_chunk_file_out_of_global_batch(mock_model: Any, tmp_path: Path) -> None:
+    """A valid zero-chunk file coexists with one global batch of all produced chunks."""
     _write_files(
         tmp_path,
         {
@@ -126,6 +162,45 @@ def test_fresh_index_stacks_zero_chunk_vector_part(mock_model: Any, tmp_path: Pa
     assert len(bm25_index.doc_order) == len(chunks)
     assert mock_model.encode.call_count == 1
     assert mock_model.encode.call_args.args[0] == [chunk.content for chunk in chunks]
+
+
+def test_fresh_index_matches_batch_sensitive_whole_corpus_oracle(tmp_path: Path) -> None:
+    """Cold vectors match legacy whole-corpus padding semantics, not per-file grouping."""
+    _write_files(
+        tmp_path,
+        {
+            "long.py": "def combine(alpha, beta, gamma):\n    return alpha + beta + gamma\n",
+            "short.py": "x = 1\n",
+        },
+    )
+
+    def one_chunk(source: str, indexed_path: str, language: str | None) -> list[Chunk]:
+        return [
+            Chunk(
+                content=source,
+                file_path=indexed_path,
+                start_line=1,
+                end_line=source.count("\n") + 1,
+                language=language,
+            )
+        ]
+
+    model = _BatchLongestModel()
+    with patch("semble.index.create.chunk_source", side_effect=one_chunk):
+        _, semantic_index, chunks, _ = create_index_from_path(tmp_path, model, display_root=tmp_path)
+
+    texts = [chunk.content for chunk in chunks]
+    assert len(texts) == 2
+    assert len(texts[0].split()) != len(texts[1].split())
+    legacy_whole_corpus = _BatchLongestModel().encode(texts)
+    unsafe_model = _BatchLongestModel()
+    unsafe_per_file = np.vstack([unsafe_model.encode([text]) for text in texts])
+
+    assert model.calls == [texts]
+    assert unsafe_model.calls == [[text] for text in texts]
+    np.testing.assert_array_equal(semantic_index.vectors, legacy_whole_corpus)
+    assert semantic_index.vectors.tobytes() == legacy_whole_corpus.tobytes()
+    assert not np.array_equal(semantic_index.vectors, unsafe_per_file)
 
 
 def _build_valid_cache(index_path: Path, mock_model: Any) -> dict:
