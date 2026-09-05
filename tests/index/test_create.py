@@ -22,6 +22,17 @@ def _write_files(root: Path, files: dict[str, str]) -> None:
 
 def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path: Path) -> None:
     """One incremental pass reuses unchanged vectors, re-embeds changes, and keeps BM25 slots current."""
+    encoded_texts: list[str] = []
+    encoded_vector_parts: list[np.ndarray] = []
+    original_encode = mock_model.encode.side_effect
+
+    def tracking_encode(texts: list[str], **kwargs: Any) -> np.ndarray:
+        vectors = original_encode(texts, **kwargs)
+        encoded_texts.extend(texts)
+        encoded_vector_parts.append(vectors.copy())
+        return vectors
+
+    mock_model.encode.side_effect = tracking_encode
     _write_files(
         tmp_path,
         {
@@ -34,6 +45,11 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
     bm25_before, semantic_before, chunks_before, manifest_before = create_index_from_path(
         tmp_path, mock_model, display_root=tmp_path
     )
+    fresh_calls = list(mock_model.encode.call_args_list)
+    assert mock_model.encode.call_count == 4  # once per file, no second full pass
+    assert sum(len(call.args[0]) for call in fresh_calls) == len(chunks_before)
+    assert encoded_texts == [chunk.content for chunk in chunks_before]
+    np.testing.assert_array_equal(semantic_before.vectors, np.vstack(encoded_vector_parts))
     a_entry = manifest_before["a.py"]
     b_entry = manifest_before["b.py"]
     a_vectors_before = semantic_before.vectors[a_entry.start : a_entry.end].copy()

@@ -195,6 +195,42 @@ Writes to `benchmarks/results/speed-<sha12>.json`.
 </details>
 
 <details>
+<summary>Cold index phase profiler</summary>
+
+Profile fresh `create_index_from_path` calls without enabling production telemetry:
+
+```bash
+uv run python -m benchmarks.profile_cold_index \
+  --corpus-path /path/to/source-tree \
+  --model-path /path/to/model \
+  --repetitions 5 \
+  --label experiment-name \
+  --revision revision-id \
+  --output /path/to/profile.json
+```
+
+The model is loaded before measurement; every repetition passes `previous=None`. `records` contains raw per-run
+nanosecond timings, counts, call-size arrays, index shape/vector bytes, and process peak RSS. `summary` recursively
+reports median/min/max for numeric fields. Phase `wall_ns` is inclusive; `exclusive_wall_ns` removes nested measured
+boundaries, while `overlap.nested_wall_ns` names each parent/child overlap. Inclusive parent and child times must not
+be summed.
+
+`total.wall_ns` and `total.process_cpu_ns` cover only `create_index_from_path`. For each phase, `calls` counts boundary
+entries and `items` counts yielded files, checked files, reads, produced chunks, BM25 documents, or model texts as
+appropriate. `call_sizes` and its count/total/median/min/max distribution are emitted for BM25 updates, `embed_chunks`,
+`StaticModel.encode`, and Model2Vec tokenizer batches. `source_read_bytes` counts stat-observed bytes for every source
+read. `index` reports files, chunks, dimensions, and vector bytes. `memory.peak_rss_bytes` is the process high-water RSS
+and therefore includes the preloaded model; the before-index and increase fields provide context.
+
+`static_model_encode` is the exact `StaticModel.encode` API boundary, not pure native model time.
+`model2vec_tokenization` is nested within it; `model2vec_lookup_mean_stack_normalization` is the derived remainder
+(`encode - tokenize`) and includes Python overhead. `vector_backend_assembly_residual` is the derived root remainder
+after named boundaries, so it also includes unwrapped index orchestration. The `counts` equality fields compare
+embedded chunks and encoded texts with produced and unique chunk IDs, making an extra embedding pass visible.
+
+</details>
+
+<details>
 <summary>Ablations</summary>
 
 ```bash
