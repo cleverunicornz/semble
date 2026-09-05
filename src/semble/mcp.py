@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from collections import Counter, OrderedDict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -18,6 +18,7 @@ from semble.git_workspace import (
     GitWorkspaceSession,
     WorkspaceBinding,
     open_git_workspace,
+    resolve_revision,
     resolve_workspace_binding,
 )
 from semble.index import SembleIndex
@@ -186,24 +187,70 @@ def _error_response(action: str, error: Exception, binding: WorkspaceBinding | N
     )
 
 
+class _WorkspaceBindingState:
+    """Refresh one context-bound workspace when its checked-out commit advances."""
+
+    def __init__(
+        self,
+        workspace_cache: _WorkspaceCache,
+        binding: WorkspaceBinding | None,
+        binding_error: str | None,
+        resolver: Callable[[], WorkspaceBinding] | None,
+    ) -> None:
+        self.workspace_cache = workspace_cache
+        self.binding = binding
+        self.binding_error = binding_error
+        self.resolver = resolver
+        self.lock = asyncio.Lock()
+
+    async def current(self) -> WorkspaceBinding:
+        """Return the active binding, replacing it after a committed HEAD change."""
+        async with self.lock:
+            if self.binding is None:
+                if self.resolver is None:
+                    raise RuntimeError(self.binding_error or "Semble was not launched inside a Git workspace")
+                self.binding = await asyncio.to_thread(self.resolver)
+                return self.binding
+            if self.resolver is None:
+                return self.binding
+
+            revision = await asyncio.to_thread(resolve_revision, self.binding.workspace_root, "HEAD")
+            if revision == self.binding.identity.revision:
+                return self.binding
+
+            replacement = await asyncio.to_thread(self.resolver)
+            if (
+                replacement.workspace_root != self.binding.workspace_root
+                or replacement.identity.repository != self.binding.identity.repository
+            ):
+                raise RuntimeError("Semantic workspace identity changed while rebinding committed HEAD")
+            await self.workspace_cache.release_workspace(str(self.binding.workspace_root))
+            self.binding = replacement
+            return self.binding
+
+
 def _register_semantic_tools(
     server: FastMCP,
     workspace_cache: _WorkspaceCache,
     default_content: Sequence[ContentType],
     binding: WorkspaceBinding | None,
     binding_error: str | None,
+    binding_resolver: Callable[[], WorkspaceBinding] | None,
 ) -> None:
-    async def current_session(content: Sequence[ContentType]) -> tuple[GitWorkspaceSession, float]:
-        if binding is None:
-            raise RuntimeError(binding_error or "Semble was not launched inside a Git workspace")
+    binding_state = _WorkspaceBindingState(workspace_cache, binding, binding_error, binding_resolver)
+
+    async def current_session(
+        content: Sequence[ContentType],
+    ) -> tuple[GitWorkspaceSession, float, WorkspaceBinding]:
         started = time.perf_counter()
+        resolved_binding = await binding_state.current()
         session = await workspace_cache.get(
-            repo=str(binding.workspace_root),
-            baseline_repo=str(binding.baseline_root),
-            identity=binding.identity,
+            repo=str(resolved_binding.workspace_root),
+            baseline_repo=str(resolved_binding.baseline_root),
+            identity=resolved_binding.identity,
             content=content,
         )
-        return session, (time.perf_counter() - started) * 1000
+        return session, (time.perf_counter() - started) * 1000, resolved_binding
 
     @server.tool()
     async def semantic_search(
@@ -223,8 +270,8 @@ def _register_semantic_tools(
                     "Optional search view. workspace (default) searches the effective current code and returns "
                     "changed_results from the private delta plus unchanged_results from the immutable baseline. "
                     "changed searches only modified/added/renamed content. unchanged searches only untouched "
-                    "baseline paths. base searches the complete original snapshot, including old versions of "
-                    "files later modified, renamed, or deleted."
+                    "baseline paths. base searches the complete active committed snapshot, including old "
+                    "versions of files later modified, renamed, or deleted."
                 )
             ),
         ] = "workspace",
@@ -262,24 +309,24 @@ def _register_semantic_tools(
 
         Use the default workspace facet for normal investigation: it searches current changed and unchanged
         content through separate BM25/vector indexes and returns separate result sections with provenance.
-        Narrow to changed or unchanged only to remove noise. Use base when comparing against the original
-        pinned snapshot, including content since replaced or deleted. Before every response, Semble synchronizes
-        all Git-visible changes, so the first search after an edit provides read-your-writes consistency. Large
-        edit batches may make that call wait; index_context reports synchronization time and exact coverage.
+        Narrow to changed or unchanged only to remove noise. Use base when comparing against the active pinned
+        snapshot, including content since replaced or deleted. A clean committed HEAD advance atomically replaces
+        that baseline before the next call. Before every response, Semble synchronizes all remaining Git-visible
+        changes, so the first search after an edit provides read-your-writes consistency. Large edit batches may
+        make that call wait; index_context reports synchronization time and exact coverage.
         """
         selected_content = _resolve_content_selection(content, default_content)
         try:
-            session, acquire_ms = await current_session(selected_content)
+            session, acquire_ms, session_binding = await current_session(selected_content)
             sync_started = time.perf_counter()
             await session.synchronize()
             synchronization_ms = (time.perf_counter() - sync_started) * 1000
             scope = SearchScope(facet)
             response = await asyncio.to_thread(session.index.search, query, scope=scope, top_k=top_k)
         except Exception as exc:
-            return _error_response("search", exc, binding)
-        assert binding is not None
+            return _error_response("search", exc, binding_state.binding)
         context = _index_context(
-            binding,
+            session_binding,
             session,
             selected_content,
             scope,
@@ -307,21 +354,21 @@ def _register_semantic_tools(
     ) -> str:
         """Describe exactly what semantic_search can see in this Paseo workspace.
 
-        Reports repository, worktree, pinned baseline revision, content coverage, exclusions, baseline and delta
-        sizes, change counts, publication generation, batching policy, and current freshness. This call also
-        synchronizes pending Git-visible changes. It never accepts or indexes an arbitrary external path.
+        Reports repository, worktree, active pinned baseline revision, content coverage, exclusions, baseline and
+        delta sizes, change counts, publication generation, batching policy, and current freshness. This call also
+        refreshes a clean committed HEAD advance and synchronizes pending Git-visible changes. It never accepts or
+        indexes an arbitrary external path.
         """
         selected_content = _resolve_content_selection(content, default_content)
         try:
-            session, acquire_ms = await current_session(selected_content)
+            session, acquire_ms, session_binding = await current_session(selected_content)
             sync_started = time.perf_counter()
             await session.synchronize()
             synchronization_ms = (time.perf_counter() - sync_started) * 1000
         except Exception as exc:
-            return _error_response("inspect", exc, binding)
-        assert binding is not None
+            return _error_response("inspect", exc, binding_state.binding)
         context = _index_context(
-            binding,
+            session_binding,
             session,
             selected_content,
             SearchScope.WORKSPACE,
@@ -343,6 +390,7 @@ def create_server(
     workspace_cache: _WorkspaceCache | None = None,
     binding: WorkspaceBinding | None = None,
     binding_error: str | None = None,
+    binding_resolver: Callable[[], WorkspaceBinding] | None = None,
 ) -> FastMCP:
     """Build a context-bound semantic-search MCP server."""
     workspace_cache = workspace_cache or _WorkspaceCache(cache)
@@ -350,16 +398,17 @@ def create_server(
         "semble",
         instructions=(
             "Use semantic_search for semantic discovery in the current Paseo agent workspace. "
-            "The server already knows the worktree, repository, and immutable starting revision; never guess or "
-            "send paths. The default workspace facet is normally correct: it searches the private changed-file "
-            "delta and untouched baseline independently, then returns changed_results and unchanged_results as "
-            "separate sections. Use changed or unchanged only to reduce noise. Use base to inspect the complete "
-            "original snapshot, including old versions of modified or deleted files. Every search synchronizes "
+            "The server already knows the worktree, repository, and active committed revision; never guess or "
+            "send paths. A clean committed HEAD advance automatically becomes the next immutable baseline. "
+            "The default workspace facet is normally correct: it searches the private changed-file delta and "
+            "untouched baseline independently, then returns changed_results and unchanged_results as separate "
+            "sections. Use changed or unchanged only to reduce noise. Use base to inspect the complete active "
+            "committed snapshot, including old versions of modified or deleted files. Every search synchronizes "
             "pending Git-visible edits before reading and reports exact index coverage and freshness. "
             "Use semantic_index_status when you need the full changed-path list or index diagnostics."
         ),
     )
-    _register_semantic_tools(server, workspace_cache, default_content, binding, binding_error)
+    _register_semantic_tools(server, workspace_cache, default_content, binding, binding_error, binding_resolver)
     return server
 
 
@@ -369,6 +418,7 @@ async def serve(
     """Start a context-bound MCP stdio server for the current workspace."""
     cache = _IndexCache(watch=False)
     workspace_cache = _WorkspaceCache(cache)
+    cache_root = resolve_cache_folder()
 
     async def _load_and_prewarm() -> None:
         try:
@@ -383,7 +433,7 @@ async def serve(
     binding: WorkspaceBinding | None = None
     binding_error: str | None = None
     try:
-        binding = await asyncio.to_thread(resolve_workspace_binding, Path.cwd(), resolve_cache_folder())
+        binding = await asyncio.to_thread(resolve_workspace_binding, Path.cwd(), cache_root)
     except Exception as exc:
         binding_error = str(exc)
         logger.warning("Semantic workspace binding is unavailable: %s", exc)
@@ -393,6 +443,7 @@ async def serve(
         workspace_cache=workspace_cache,
         binding=binding,
         binding_error=binding_error,
+        binding_resolver=lambda: resolve_workspace_binding(Path.cwd(), cache_root),
     )
     try:
         await server.run_stdio_async()

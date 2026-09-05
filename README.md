@@ -224,7 +224,8 @@ result.chunk.content     # "def save_pretrained(self, path: PathLike, ..."
 ## MCP Server
 
 Semble runs as a context-bound MCP server for coding agents. The MCP process binds itself to the Git worktree in
-which the agent launched; agents never supply repository paths, baseline paths, identities, or revisions.
+which the agent launched; agents never supply repository paths, baseline paths, identities, or revisions. A clean
+committed `HEAD` advance atomically becomes the next immutable baseline, while uncommitted work remains private delta.
 
 | Tool | Description |
 |------|-------------|
@@ -241,18 +242,19 @@ ranking.
 | `workspace` (default) | Effective current code. Returns separate `changed_results` and `unchanged_results` sections. |
 | `changed` | Modified, added, and renamed files from the private delta only. |
 | `unchanged` | Baseline files not modified, renamed, or deleted in this worktree. |
-| `base` | Complete original snapshot, including old versions of files later modified, renamed, or deleted. |
+| `base` | Complete active committed snapshot, including old versions of files later modified, renamed, or deleted. |
 
 Every result carries `origin` and `change` provenance. Modified, renamed, and deleted paths shadow baseline chunks in
 the effective `workspace` and `unchanged` views without mutating the baseline; `base` deliberately preserves those
 original chunks.
 
-Before each search, Semble synchronizes all Git-visible worktree changes. Filesystem events are normally grouped after
-a 50 ms quiet window and for no more than 200 ms during a continuous burst, allowing one multi-file patch or formatter
-run to publish one atomic delta generation. If search arrives first, it bypasses that wait by reconciling the current
-Git delta and returns only after read-your-writes is satisfied. Large change sets can therefore increase that call's
-latency; `index_context` reports synchronization time, generation, indexed counts, and exclusions rather than silently
-returning stale results.
+Before each search, Semble first adopts any clean committed `HEAD` advance, then synchronizes all remaining
+Git-visible worktree changes. Filesystem events are normally grouped after a 50 ms quiet window and for no more than
+200 ms during a continuous burst, allowing one multi-file patch or formatter run to publish one atomic delta
+generation. If search arrives first, it bypasses that wait by reconciling the current Git delta and returns only
+after read-your-writes is satisfied. Large change sets can therefore increase that call's latency; `index_context`
+reports the active baseline revision, synchronization time, generation, indexed counts, and exclusions rather than
+silently returning stale results.
 
 For per-agent setup instructions, see the [installation docs](docs/installation.md#mcp-server).
 
