@@ -103,6 +103,31 @@ def test_incremental_reindex_reuses_updates_and_prunes(mock_model: Any, tmp_path
     assert set(bm25_after.doc_order) == expected_ids
 
 
+def test_fresh_index_stacks_zero_chunk_vector_part(mock_model: Any, tmp_path: Path) -> None:
+    """A valid zero-chunk file keeps its empty vector part beside a nonempty file."""
+    _write_files(
+        tmp_path,
+        {
+            "empty.py": " " * 128,
+            "live.py": "def live_value():\n    return 1\n",
+        },
+    )
+
+    bm25_index, semantic_index, chunks, manifest = create_index_from_path(
+        tmp_path,
+        mock_model,
+        display_root=tmp_path,
+    )
+
+    assert manifest["empty.py"].count == 0
+    assert chunks
+    assert all(chunk.file_path == "live.py" for chunk in chunks)
+    assert semantic_index.vectors.shape == (len(chunks), mock_model.dim)
+    assert len(bm25_index.doc_order) == len(chunks)
+    assert mock_model.encode.call_count == 1
+    assert mock_model.encode.call_args.args[0] == [chunk.content for chunk in chunks]
+
+
 def _build_valid_cache(index_path: Path, mock_model: Any) -> dict:
     """Build a real, well-formed on-disk index and return its metadata dict for mutation."""
     src = index_path.parent / "src"

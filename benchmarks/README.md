@@ -209,24 +209,32 @@ uv run python -m benchmarks.profile_cold_index \
   --output /path/to/profile.json
 ```
 
-The model is loaded before measurement; every repetition passes `previous=None`. `records` contains raw per-run
-nanosecond timings, counts, call-size arrays, index shape/vector bytes, and process peak RSS. `summary` recursively
-reports median/min/max for numeric fields. Phase `wall_ns` is inclusive; `exclusive_wall_ns` removes nested measured
-boundaries, while `overlap.nested_wall_ns` names each parent/child overlap. Inclusive parent and child times must not
-be summed.
+The model is loaded before measurement; every repetition passes `previous=None`. Cold means fresh index state, not a
+fresh process or cold parser/filesystem caches. `records` contains raw per-run nanosecond timings, counts, call-size
+arrays, index shape/vector bytes, and process peak RSS. `summary` recursively reports median/min/max for numeric fields
+and `embedding_invariants` states whether each duplicate-pass check held across every repetition.
 
-`total.wall_ns` and `total.process_cpu_ns` cover only `create_index_from_path`. For each phase, `calls` counts boundary
-entries and `items` counts yielded files, checked files, reads, produced chunks, BM25 documents, or model texts as
-appropriate. `call_sizes` and its count/total/median/min/max distribution are emitted for BM25 updates, `embed_chunks`,
-`StaticModel.encode`, and Model2Vec tokenizer batches. `source_read_bytes` counts stat-observed bytes for every source
-read. `index` reports files, chunks, dimensions, and vector bytes. `memory.peak_rss_bytes` is the process high-water RSS
-and therefore includes the preloaded model; the before-index and increase fields provide context.
+`total.instrumented_wall_ns` and `total.instrumented_process_cpu_ns` surround `create_index_from_path`, including all
+wrapper and recorder overhead. They must not be compared with an uninstrumented benchmark; measure that total
+separately. Phase `wall_ns` is inclusive, `exclusive_wall_ns` removes nested measured boundaries, and
+`overlap.nested_wall_ns` names each parent/child overlap. Inclusive parent and child times must not be summed.
+
+For each phase, `calls` counts boundary entries and `items` counts outputs appropriate to that boundary.
+`file_walk_iterator` includes traversal work and its internal filesystem checks. `file_status_checks` includes file
+eligibility stats and sub-128-byte emptiness probes; its `items` count is checked files, not individual stat calls.
+`source_reads` covers only the subsequent production source read;
+`counts.source_read_bytes` is the UTF-8 size of its returned text and is counted after the timer. Direct manifest mtime
+stats are unattributed. `call_sizes` plus count/total/median/min/max are emitted for BM25 updates, `embed_chunks`,
+`StaticModel.encode`, and Model2Vec tokenizer batches. `index` reports files, chunks, dimensions, and vector bytes.
 
 `static_model_encode` is the exact `StaticModel.encode` API boundary, not pure native model time.
 `model2vec_tokenization` is nested within it; `model2vec_lookup_mean_stack_normalization` is the derived remainder
-(`encode - tokenize`) and includes Python overhead. `vector_backend_assembly_residual` is the derived root remainder
-after named boundaries, so it also includes unwrapped index orchestration. The `counts` equality fields compare
-embedded chunks and encoded texts with produced and unique chunk IDs, making an extra embedding pass visible.
+(`encode - tokenize`) and includes Python overhead. `unattributed_including_profiler_overhead` is the root exclusive
+remainder: unwrapped index orchestration, vector/BM25 finalization, manifest mtime stats, and profiler bookkeeping.
+
+`memory.process_peak_rss_bytes` is a monotonic process-lifetime high-water mark. It includes the preloaded model and
+all earlier repetitions, so it is not a per-repetition allocation delta. The recorder is single-thread-only; a future
+parallel indexer requires thread-local or synchronized instrumentation.
 
 </details>
 

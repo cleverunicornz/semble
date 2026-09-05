@@ -19,12 +19,10 @@ from unittest.mock import patch
 
 import semble.chunking.chunking as chunking_module
 import semble.index.create as create_module
-import semble.index.files as files_module
 from semble.index.dense import load_model
 
 _PHASE_NAMES = (
     "file_walk_iterator",
-    "path_stat",
     "file_status_checks",
     "language_detection",
     "source_reads",
@@ -73,12 +71,12 @@ class _ActivePhase:
 
 
 class _PhaseRecorder:
-    """Collect inclusive boundaries and an exact exclusive-time accounting."""
+    """Collect single-threaded inclusive boundaries and exclusive-time accounting."""
 
     def __init__(self, clock: Callable[[], int] = time.perf_counter_ns) -> None:
         """Create a recorder, optionally with a deterministic test clock."""
         self._clock = clock
-        self._phases = {name: _PhaseTotals() for name in ("total_index", *_PHASE_NAMES)}
+        self._phases = {name: _PhaseTotals() for name in ("instrumented_index", *_PHASE_NAMES)}
         self._stack: list[_ActivePhase] = []
         self.counters: dict[str, int] = {}
         self.nested_wall_ns: dict[str, int] = {}
@@ -160,9 +158,38 @@ def _summarize_mappings(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _summarize_records(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Build median/min/max summaries without treating repetition numbers as measurements."""
+    """Build numeric summaries plus duplicate-pass verdicts across all repetitions."""
     stripped = [{key: value for key, value in record.items() if key != "repetition"} for record in records]
-    return _summarize_mappings(stripped)
+    summary = _summarize_mappings(stripped)
+    invariants = _summarize_embedding_invariants(records)
+    if invariants:
+        summary["embedding_invariants"] = invariants
+    return summary
+
+
+def _summarize_embedding_invariants(records: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, int | bool]]:
+    """Report whether each duplicate-pass invariant held in every repetition."""
+    names = (
+        "embedded_chunks_equal_produced_chunks",
+        "encoded_texts_equal_produced_chunks",
+        "encoded_texts_equal_unique_chunks",
+    )
+    if not records or any(
+        not isinstance(record.get("counts"), Mapping)
+        or any(name not in record["counts"] for name in names)
+        for record in records
+    ):
+        return {}
+
+    result: dict[str, dict[str, int | bool]] = {}
+    for name in names:
+        matches = sum(record["counts"][name] is True for record in records)
+        result[name] = {
+            "all_repetitions": matches == len(records),
+            "matching_repetitions": matches,
+            "repetitions": len(records),
+        }
+    return result
 
 
 def _sequence_size(value: Sequence[str] | str) -> int:
@@ -170,95 +197,87 @@ def _sequence_size(value: Sequence[str] | str) -> int:
     return 1 if isinstance(value, str) else len(value)
 
 
-@contextlib.contextmanager
-def _instrument_cold_path(recorder: _PhaseRecorder, model: Any) -> Iterator[None]:
-    """Install benchmark-local wrappers around the production cold-index boundaries."""
-    original_walk_files = create_module.walk_files
-    original_path_stat = Path.stat
-    original_get_file_status = create_module.get_file_status
-    original_detect_language = create_module.detect_language
-    original_read_file_text = files_module.read_file_text
-    original_chunk_source = create_module.chunk_source
-    original_tree_sitter_chunk = chunking_module.chunk
-    original_fallback_chunk = chunking_module.chunk_lines
-    original_reindex_file = create_module._reindex_file
-    original_bm25_tokenize = create_module.tokenize
-    original_embed_chunks = create_module.embed_chunks
-    original_model_encode = model.encode
-    original_model_tokenize = model.tokenize
-    file_sizes: dict[Path, int] = {}
+class _ColdPathWrappers:
+    """Single-threaded benchmark wrappers for cold-index boundaries."""
 
-    def profiled_walk_files(*args: Any, **kwargs: Any) -> Iterator[Path]:
+    def __init__(self, recorder: _PhaseRecorder, model: Any) -> None:
+        """Capture original callables before ExitStack applies replacements."""
+        self._recorder = recorder
+        self._walk_files = create_module.walk_files
+        self._get_file_status = create_module.get_file_status
+        self._detect_language = create_module.detect_language
+        self._read_file_text = create_module.read_file_text
+        self._chunk_source = create_module.chunk_source
+        self._tree_sitter_chunk = chunking_module.chunk
+        self._fallback_chunk = chunking_module.chunk_lines
+        self._reindex_file = create_module._reindex_file
+        self._bm25_tokenize = create_module.tokenize
+        self._embed_chunks = create_module.embed_chunks
+        self._model_encode = model.encode
+        self._model_tokenize = model.tokenize
+
+    def walk_files(self, *args: Any, **kwargs: Any) -> Iterator[Path]:
         """Measure only time spent advancing the lazy file iterator."""
-        recorder.add_counter("file_walk_iterators")
-        iterator = iter(original_walk_files(*args, **kwargs))
+        self._recorder.add_counter("file_walk_iterators")
+        iterator = iter(self._walk_files(*args, **kwargs))
         while True:
             try:
-                with recorder.measure("file_walk_iterator"):
+                with self._recorder.measure("file_walk_iterator"):
                     item = next(iterator)
             except StopIteration:
                 return
-            recorder.add_items("file_walk_iterator", 1)
-            recorder.add_counter("walked_files")
+            self._recorder.add_items("file_walk_iterator", 1)
+            self._recorder.add_counter("walked_files")
             yield item
 
-    def profiled_path_stat(path: Path, *args: Any, **kwargs: Any) -> Any:
-        """Measure explicit Path.stat calls and retain their observed byte sizes."""
-        with recorder.measure("path_stat", items=1):
-            result = original_path_stat(path, *args, **kwargs)
-            file_sizes[path] = int(result.st_size)
-            return result
-
-    def profiled_get_file_status(*args: Any, **kwargs: Any) -> Any:
-        """Measure file eligibility checks, including nested stat and small-file reads."""
-        with recorder.measure("file_status_checks", items=1):
-            result = original_get_file_status(*args, **kwargs)
-        recorder.add_counter(f"file_status_{result.value}")
+    def get_file_status(self, *args: Any, **kwargs: Any) -> Any:
+        """Measure eligibility checks, including their stats and small-file emptiness probes."""
+        with self._recorder.measure("file_status_checks", items=1):
+            result = self._get_file_status(*args, **kwargs)
+        self._recorder.add_counter(f"file_status_{result.value}")
         return result
 
-    def profiled_detect_language(*args: Any, **kwargs: Any) -> Any:
+    def detect_language(self, *args: Any, **kwargs: Any) -> Any:
         """Measure extension-based language detection."""
-        with recorder.measure("language_detection", items=1):
-            result = original_detect_language(*args, **kwargs)
+        with self._recorder.measure("language_detection", items=1):
+            result = self._detect_language(*args, **kwargs)
         if result is not None:
-            recorder.add_counter("languages_detected")
+            self._recorder.add_counter("languages_detected")
         return result
 
-    def profiled_read_file_text(file_path: Path) -> str:
-        """Measure source reads and count bytes from the preceding production stat."""
-        with recorder.measure("source_reads", items=1):
-            text = original_read_file_text(file_path)
-        byte_count = file_sizes.get(file_path)
-        if byte_count is None:
-            byte_count = len(text.encode("utf-8"))
-        recorder.add_counter("source_read_bytes", byte_count)
+    def read_file_text(self, file_path: Path) -> str:
+        """Measure the production source read and count returned UTF-8 bytes afterward."""
+        with self._recorder.measure("source_reads", items=1):
+            text = self._read_file_text(file_path)
+        self._recorder.add_counter("source_read_bytes", len(text.encode("utf-8")))
         return text
 
-    def profiled_chunk_source(*args: Any, **kwargs: Any) -> Any:
+    def chunk_source(self, *args: Any, **kwargs: Any) -> Any:
         """Measure the full chunk-source boundary and its produced chunks."""
-        with recorder.measure("chunk_source"):
-            result = original_chunk_source(*args, **kwargs)
-        recorder.add_items("chunk_source", len(result))
-        recorder.add_counter("chunk_source_calls")
+        with self._recorder.measure("chunk_source"):
+            result = self._chunk_source(*args, **kwargs)
+        self._recorder.add_items("chunk_source", len(result))
+        self._recorder.add_counter("chunk_source_calls")
         return result
 
-    def profiled_tree_sitter_chunk(*args: Any, **kwargs: Any) -> Any:
+    def tree_sitter_chunk(self, *args: Any, **kwargs: Any) -> Any:
         """Measure tree-sitter chunking attempts before any fallback."""
-        with recorder.measure("tree_sitter_chunking"):
-            result = original_tree_sitter_chunk(*args, **kwargs)
+        with self._recorder.measure("tree_sitter_chunking"):
+            result = self._tree_sitter_chunk(*args, **kwargs)
         if result is not None:
-            recorder.add_items("tree_sitter_chunking", len(result))
-            recorder.add_counter("tree_sitter_successes")
+            self._recorder.add_items("tree_sitter_chunking", len(result))
+            self._recorder.add_counter("tree_sitter_successes")
         return result
 
-    def profiled_fallback_chunk(*args: Any, **kwargs: Any) -> Any:
+    def fallback_chunk(self, *args: Any, **kwargs: Any) -> Any:
         """Measure line-based fallback chunking."""
-        with recorder.measure("fallback_line_chunking"):
-            result = original_fallback_chunk(*args, **kwargs)
-        recorder.add_items("fallback_line_chunking", len(result))
+        with self._recorder.measure("fallback_line_chunking"):
+            result = self._fallback_chunk(*args, **kwargs)
+        self._recorder.add_items("fallback_line_chunking", len(result))
         return result
 
-    def profiled_reindex_file(
+    def reindex_file(
+        self,
         bm25_index: Any,
         indexed_path: str,
         file_chunks: list[Any],
@@ -266,52 +285,55 @@ def _instrument_cold_path(recorder: _PhaseRecorder, model: Any) -> Iterator[None
     ) -> None:
         """Measure BM25 replacement/addition around its nested tokenization."""
         size = len(file_chunks)
-        with recorder.measure("bm25_replace_add_total", items=size, call_size=size):
-            original_reindex_file(bm25_index, indexed_path, file_chunks, previous_entry)
-        recorder.add_counter("bm25_documents_added", size)
+        with self._recorder.measure("bm25_replace_add_total", items=size, call_size=size):
+            self._reindex_file(bm25_index, indexed_path, file_chunks, previous_entry)
+        self._recorder.add_counter("bm25_documents_added", size)
         if previous_entry is not None:
-            recorder.add_counter("bm25_document_slots_removed", previous_entry.count)
+            self._recorder.add_counter("bm25_document_slots_removed", previous_entry.count)
 
-    def profiled_bm25_tokenize(text: str) -> list[str]:
+    def bm25_tokenize(self, text: str) -> list[str]:
         """Measure BM25 tokenization nested in replacement/addition."""
-        with recorder.measure("bm25_tokenization", items=1):
-            result = original_bm25_tokenize(text)
-        recorder.add_counter("bm25_tokens", len(result))
+        with self._recorder.measure("bm25_tokenization", items=1):
+            result = self._bm25_tokenize(text)
+        self._recorder.add_counter("bm25_tokens", len(result))
         return result
 
-    def profiled_embed_chunks(profiled_model: Any, chunks: list[Any]) -> Any:
+    def embed_chunks(self, profiled_model: Any, chunks: list[Any]) -> Any:
         """Measure the exact production embed_chunks boundary."""
         size = len(chunks)
-        with recorder.measure("embed_chunks", items=size, call_size=size):
-            return original_embed_chunks(profiled_model, chunks)
+        with self._recorder.measure("embed_chunks", items=size, call_size=size):
+            return self._embed_chunks(profiled_model, chunks)
 
-    def profiled_model_encode(sentences: Sequence[str] | str, *args: Any, **kwargs: Any) -> Any:
+    def model_encode(self, sentences: Sequence[str] | str, *args: Any, **kwargs: Any) -> Any:
         """Measure the exact StaticModel.encode API boundary."""
         size = _sequence_size(sentences)
-        with recorder.measure("static_model_encode", items=size, call_size=size):
-            return original_model_encode(sentences, *args, **kwargs)
+        with self._recorder.measure("static_model_encode", items=size, call_size=size):
+            return self._model_encode(sentences, *args, **kwargs)
 
-    def profiled_model_tokenize(sentences: Sequence[str] | str, *args: Any, **kwargs: Any) -> Any:
+    def model_tokenize(self, sentences: Sequence[str] | str, *args: Any, **kwargs: Any) -> Any:
         """Measure Model2Vec tokenization nested inside StaticModel.encode."""
         size = _sequence_size(sentences)
-        with recorder.measure("model2vec_tokenization", items=size, call_size=size):
-            return original_model_tokenize(sentences, *args, **kwargs)
+        with self._recorder.measure("model2vec_tokenization", items=size, call_size=size):
+            return self._model_tokenize(sentences, *args, **kwargs)
 
+
+@contextlib.contextmanager
+def _instrument_cold_path(recorder: _PhaseRecorder, model: Any) -> Iterator[None]:
+    """Install and exception-safely restore benchmark-local cold-path wrappers."""
+    wrappers = _ColdPathWrappers(recorder, model)
     with contextlib.ExitStack() as stack:
-        stack.enter_context(patch.object(create_module, "walk_files", profiled_walk_files))
-        stack.enter_context(patch.object(Path, "stat", profiled_path_stat))
-        stack.enter_context(patch.object(create_module, "get_file_status", profiled_get_file_status))
-        stack.enter_context(patch.object(create_module, "detect_language", profiled_detect_language))
-        stack.enter_context(patch.object(create_module, "read_file_text", profiled_read_file_text))
-        stack.enter_context(patch.object(files_module, "read_file_text", profiled_read_file_text))
-        stack.enter_context(patch.object(create_module, "chunk_source", profiled_chunk_source))
-        stack.enter_context(patch.object(chunking_module, "chunk", profiled_tree_sitter_chunk))
-        stack.enter_context(patch.object(chunking_module, "chunk_lines", profiled_fallback_chunk))
-        stack.enter_context(patch.object(create_module, "_reindex_file", profiled_reindex_file))
-        stack.enter_context(patch.object(create_module, "tokenize", profiled_bm25_tokenize))
-        stack.enter_context(patch.object(create_module, "embed_chunks", profiled_embed_chunks))
-        stack.enter_context(patch.object(model, "encode", profiled_model_encode))
-        stack.enter_context(patch.object(model, "tokenize", profiled_model_tokenize))
+        stack.enter_context(patch.object(create_module, "walk_files", wrappers.walk_files))
+        stack.enter_context(patch.object(create_module, "get_file_status", wrappers.get_file_status))
+        stack.enter_context(patch.object(create_module, "detect_language", wrappers.detect_language))
+        stack.enter_context(patch.object(create_module, "read_file_text", wrappers.read_file_text))
+        stack.enter_context(patch.object(create_module, "chunk_source", wrappers.chunk_source))
+        stack.enter_context(patch.object(chunking_module, "chunk", wrappers.tree_sitter_chunk))
+        stack.enter_context(patch.object(chunking_module, "chunk_lines", wrappers.fallback_chunk))
+        stack.enter_context(patch.object(create_module, "_reindex_file", wrappers.reindex_file))
+        stack.enter_context(patch.object(create_module, "tokenize", wrappers.bm25_tokenize))
+        stack.enter_context(patch.object(create_module, "embed_chunks", wrappers.embed_chunks))
+        stack.enter_context(patch.object(model, "encode", wrappers.model_encode))
+        stack.enter_context(patch.object(model, "tokenize", wrappers.model_tokenize))
         yield
 
 
@@ -345,10 +367,13 @@ def _derived_timings(recorder: _PhaseRecorder) -> dict[str, dict[str, Any]]:
             "derived_from": "StaticModel.encode inclusive minus nested Model2Vec tokenization",
             "native_only": False,
         },
-        "vector_backend_assembly_residual": {
-            "wall_ns": recorder.phase("total_index").exclusive_wall_ns,
-            "derived_from": "total index wall minus all directly nested instrumented boundaries",
-            "includes": "vector stacking, BM25 order/backend construction, and unwrapped index orchestration",
+        "unattributed_including_profiler_overhead": {
+            "wall_ns": recorder.phase("instrumented_index").exclusive_wall_ns,
+            "derived_from": "instrumented index wall minus directly nested measured boundaries",
+            "includes": (
+                "unwrapped index orchestration, vector/BM25 finalization, manifest mtime stats, "
+                "and profiler bookkeeping"
+            ),
         },
     }
 
@@ -374,9 +399,8 @@ def _embedding_counters(
 def _profile_once(corpus_path: Path, model: Any, repetition: int) -> dict[str, Any]:
     """Profile one fresh create_index_from_path call with no previous index."""
     recorder = _PhaseRecorder()
-    peak_rss_before = _peak_rss_bytes()
     with _instrument_cold_path(recorder, model):
-        with recorder.measure("total_index"):
+        with recorder.measure("instrumented_index"):
             cpu_started_ns = time.process_time_ns()
             bm25_index, semantic_index, chunks, manifest = create_module.create_index_from_path(
                 corpus_path,
@@ -384,7 +408,7 @@ def _profile_once(corpus_path: Path, model: Any, repetition: int) -> dict[str, A
                 display_root=corpus_path,
                 previous=None,
             )
-            process_cpu_ns = time.process_time_ns() - cpu_started_ns
+            instrumented_process_cpu_ns = time.process_time_ns() - cpu_started_ns
     peak_rss_bytes = _peak_rss_bytes()
 
     produced_chunks = len(chunks)
@@ -397,25 +421,17 @@ def _profile_once(corpus_path: Path, model: Any, repetition: int) -> dict[str, A
 
     phases = recorder.phase_records()
     exclusive_phase_wall_ns = {name: phase["exclusive_wall_ns"] for name, phase in phases.items()}
-    residual_ns = recorder.phase("total_index").exclusive_wall_ns
-    accounted_wall_ns = residual_ns + sum(exclusive_phase_wall_ns.values())
-    total_wall_ns = recorder.phase("total_index").wall_ns
+    instrumented_wall_ns = recorder.phase("instrumented_index").wall_ns
 
     memory: dict[str, int | None] = {
-        "peak_rss_before_index_bytes": peak_rss_before,
-        "peak_rss_bytes": peak_rss_bytes,
-        "peak_rss_increase_bytes": (
-            None
-            if peak_rss_before is None or peak_rss_bytes is None
-            else max(0, peak_rss_bytes - peak_rss_before)
-        ),
+        "process_peak_rss_bytes": peak_rss_bytes,
     }
     vectors = semantic_index.vectors
     return {
         "repetition": repetition,
         "total": {
-            "wall_ns": total_wall_ns,
-            "process_cpu_ns": process_cpu_ns,
+            "instrumented_wall_ns": instrumented_wall_ns,
+            "instrumented_process_cpu_ns": instrumented_process_cpu_ns,
         },
         "phases": phases,
         "derived": _derived_timings(recorder),
@@ -430,9 +446,6 @@ def _profile_once(corpus_path: Path, model: Any, repetition: int) -> dict[str, A
         "overlap": {
             "nested_wall_ns": dict(sorted(recorder.nested_wall_ns.items())),
             "exclusive_phase_wall_ns": exclusive_phase_wall_ns,
-            "residual_wall_ns": residual_ns,
-            "accounted_wall_ns": accounted_wall_ns,
-            "accounting_difference_ns": total_wall_ns - accounted_wall_ns,
         },
     }
 
@@ -465,22 +478,21 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     """Run repeated fresh-index profiles and write raw records plus summaries."""
     args = _parse_args(argv)
-    model, resolved_model_path = load_model(args.model_path)
+    model = load_model(args.model_path)[0]
     records: list[dict[str, Any]] = []
     for repetition in range(1, args.repetitions + 1):
         records.append(_profile_once(args.corpus_path, model, repetition))
         gc.collect()
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "benchmark": "semble-create-index-cold-profile",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "metadata": {
             "label": args.label,
             "revision": args.revision,
             "corpus_path": str(args.corpus_path),
-            "model_path_requested": args.model_path,
-            "model_path_resolved": resolved_model_path,
+            "model_path": args.model_path,
             "repetitions": args.repetitions,
             "python_version": platform.python_version(),
             "platform": platform.platform(),
@@ -490,15 +502,29 @@ def main(argv: Sequence[str] | None = None) -> None:
             "wall_unit": "nanoseconds",
             "inclusive": "wall_ns includes nested instrumented boundaries and must not be summed with them",
             "exclusive": "exclusive_wall_ns removes directly nested instrumented intervals and is non-overlapping",
+            "instrumented_total": (
+                "total instrumented fields include wrapper/recorder overhead and are not an uninstrumented benchmark"
+            ),
             "static_model_encode": "exact StaticModel.encode API wall boundary, not pure native model time",
             "model2vec_residual": (
                 "derived encode remainder after tokenization; includes lookup/mean/stack/"
                 "normalization and Python overhead"
             ),
-            "vector_backend_residual": (
-                "derived root remainder; includes assembly/backend work and unwrapped orchestration"
+            "unattributed": (
+                "derived root remainder includes unwrapped index orchestration, vector/BM25 finalization, "
+                "manifest mtime stats, and profiler bookkeeping"
             ),
-            "cold_index": "every repetition passes previous=None; model loading is outside the measured index boundary",
+            "cold_index": (
+                "every repetition passes previous=None; model loading is outside the boundary, while process, parser, "
+                "and filesystem caches may be warm"
+            ),
+            "process_peak_rss": (
+                "monotonic process-lifetime high-water RSS; reflects earlier peaks including model load and repetitions"
+            ),
+            "single_thread_only": (
+                "recorder state is unsynchronized; a parallel indexer requires thread-local or "
+                "synchronized instrumentation"
+            ),
         },
         "records": records,
         "summary": _summarize_records(records),
