@@ -28,6 +28,6 @@ This BACKPORT records existing repository knowledge without creating a fork-spec
 
 ## Closure state
 
-- Current run: none
+- Current run: `20260906T211928Z-218ec16464c0290c6567e4cb29c3532d594bf75c` (open)
 - Last completed closure: run `20260906T203244Z-fe65ccf3197446ee06ad3ab7d023b798219a2b0d`, opened at `3f93c19ba404dd06c09e6fbbcb9740ded5d6bc1f`
 - Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-11/20260906T203244Z-fe65ccf3197446ee06ad3ab7d023b798219a2b0d/`
