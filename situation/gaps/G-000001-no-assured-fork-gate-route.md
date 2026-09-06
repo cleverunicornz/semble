@@ -1,6 +1,6 @@
 ## State
 
-open
+superseded
 
 ## Gap
 
@@ -21,7 +21,7 @@ No fork gate claim can cite an assured witness run URL through the record system
 
 ## Resolution
 
-None.
+[G-000002](situation/gaps/G-000002-no-assured-fork-gate-route.md)
 
 ## References
 
