@@ -1,0 +1,5 @@
+model2vec==0.8.1
+numpy==2.4.4
+sentence-transformers==5.5.0
+torch==2.10.0
+transformers==5.8.0
