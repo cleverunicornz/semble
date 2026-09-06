@@ -203,5 +203,5 @@ Repository-specific orientation belongs in the repository block that follows.
 - Critical invariants: none.
 - Verification: Unassured — no assured witness route is presently recorded for fork gate claims; [G-000001](situation/gaps/G-000001-no-assured-fork-gate-route.md) retains the absence and [C-000001](situation/candidates/C-000001-qualify-fork-gate-assurance.md) proposes qualification without promoting it.
 - Tool priority: organization defaults.
-- Donor boundary: `acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce` (the BACKPORT trigger head named by opening checkpoint `7580cd4f5819255c9b2ff7e17f007735e9f62d51`).
+- Donor boundary: `7580cd4f5819255c9b2ff7e17f007735e9f62d51` (the published BACKPORT opening checkpoint; its trigger head is `acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce`).
 </bedrock-repository>
