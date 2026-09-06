@@ -201,7 +201,7 @@ Repository-specific orientation belongs in the repository block that follows.
 - Ownership: `UPSTREAM_FORK` — public upstream: https://github.com/MinishLab/semble. Synchronization and contribution follow the organization's fork rules in the root organization block.
 - Phase and implementation map: `situation/context.md`.
 - Critical invariants: none.
-- Verification: Unassured — no assured witness route is presently recorded for fork gate claims; [G-000001](situation/gaps/G-000001-no-assured-fork-gate-route.md) retains the absence and [C-000001](situation/candidates/C-000001-qualify-fork-gate-assurance.md) proposes qualification without promoting it.
+- Verification: Unassured — no assured witness route is presently recorded for fork gate claims; [G-000002](situation/gaps/G-000002-no-assured-fork-gate-route.md) retains the absence and [C-000002](situation/candidates/C-000002-qualify-fork-gate-assurance.md) proposes qualification without promoting it.
 - Tool priority: organization defaults.
 - Donor boundary: `7580cd4f5819255c9b2ff7e17f007735e9f62d51` (the published BACKPORT opening checkpoint; its trigger head is `acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce`).
 </bedrock-repository>
