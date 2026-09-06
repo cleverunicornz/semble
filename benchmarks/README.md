@@ -410,3 +410,14 @@ uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --rootdir
 ```
 
 </details>
+
+<details>
+<summary>Rust-first Model2Vec training smoke</summary>
+
+Runs the pinned Qwen3 teacher-to-static-student GPU smoke, reports held-out
+pair-retrieval metrics, exports a standard Model2Vec model, and verifies it
+through Semble's CPU search path. See
+[model2vec_training/README.md](model2vec_training/README.md) for the exact
+inputs, gates, and remote command.
+
+</details>
