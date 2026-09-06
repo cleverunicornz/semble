@@ -112,7 +112,7 @@ cd "$SOURCE"
 cp "$DATA_OUTPUT/manifest.json" "$RESULT/training-data-manifest.json"
 gzip -c "$DATA_OUTPUT/train.jsonl" > "$RESULT/training-data.jsonl.gz"
 gzip -c "$DATA_OUTPUT/provenance.jsonl" > "$RESULT/training-provenance.jsonl.gz"
-"$VENV/bin/python" -m pip freeze > "$RESULT/environment.freeze.txt"
+"$UV" pip freeze --python "$VENV/bin/python" > "$RESULT/environment.freeze.txt"
 sha256sum \
   "$SOURCE/benchmarks/model2vec_training/requirements-cpu.txt" \
   "$SOURCE/benchmarks/model2vec_training/requirements-cpu.lock" \
