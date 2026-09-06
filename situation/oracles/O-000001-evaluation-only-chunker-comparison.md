@@ -22,7 +22,11 @@ The promise passes only when all applicable legs hold within its Scope:
 
 ## Fail
 
-The promise fails when any applicable leg is contradicted: the harness changes production source or persistent cache behavior; a native-boundary fault becomes a successful fallback measurement; or a timing result accepts missing, reordered, or unstable native output.
+The promise fails when any applicable leg is contradicted:
+
+1. The harness changes production source or persistent cache behavior.
+2. A native-boundary fault becomes a successful fallback measurement.
+3. A timing result accepts missing, reordered, or unstable native output.
 
 ## References
 
