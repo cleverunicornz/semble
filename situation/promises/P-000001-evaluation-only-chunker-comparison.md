@@ -4,11 +4,15 @@ implemented
 
 ## Promise
 
-With valid arguments and available selected benchmark inputs, the evaluation-only chunker harness evaluates Semble's current chunking path or the native legacy cAST chunking path at the index chunk-source seam, emits a labeled JSON measurement, and rejects native-boundary failures rather than presenting them as fallback measurements.
+With valid arguments and available selected benchmark inputs, the evaluation-only chunker harness provides the following mode-specific measurements:
+
+- In `current`, it runs a retrieval comparison through Semble's existing chunk-source function at the index chunk-source seam. A successful run writes labeled JSON identifying `current`.
+- In `legacy-cast`, it runs a retrieval comparison at that seam; it calls native `chunk_source` only for paths accepted by `supports_path`, uses Semble's current chunker for paths the predicate rejects, preserves the selected path and returned line metadata in converted Semble chunks, and treats a native support-check or chunking exception as an evaluation error rather than a successful fallback measurement. A successful run writes labeled JSON identifying `legacy-cast`.
+- In `chunk-timing`, it independently measures the native `chunk_files` batch API rather than a retrieval comparison, accepts only a list with one result for each expected path in the same order and a stable file/chunk/error shape across repetitions, and records the count of returned per-file errors. A successful run writes labeled JSON identifying `chunk-timing`.
 
 ## Scope
 
-This promise covers `benchmarks/chunker_eval.py` in its `current`, `legacy-cast`, and `chunk-timing` modes, including its temporary evaluation cache and `benchmarks/results/` output. It covers only the harness's own process and selected benchmark inputs.
+This promise covers `benchmarks/chunker_eval.py` in its `current` and `legacy-cast` retrieval modes at the `semble.index.create.chunk_source` seam and in its independent `chunk-timing` native batch mode. It includes the retrieval modes' temporary evaluation cache and every mode's labeled JSON output under `benchmarks/results/`, and covers only the harness process and selected benchmark inputs.
 
 ## Oracle
 

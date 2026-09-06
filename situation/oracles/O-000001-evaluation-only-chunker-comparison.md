@@ -16,17 +16,17 @@ designed
 
 The promise passes only when all applicable legs hold within its Scope:
 
-1. `current` uses the existing Semble chunk-source function at the evaluation seam and writes a labeled result identifying the current mode.
-2. `legacy-cast` calls the native chunker only for paths its support predicate accepts, preserves the resulting path and line metadata in Semble chunks, and turns a native support or chunking failure into an evaluation error rather than a fallback measurement.
-3. `chunk-timing` accepts native batch output only when it has the expected count and order, records its error count, and rejects a changed result shape across repetitions.
+1. `current` runs the retrieval comparison through the evaluation seam using Semble's existing chunk-source function, and a successful run writes JSON whose `mode` is `current` and whose `label` is the invocation label.
+2. `legacy-cast` runs the retrieval comparison at that seam; for a path accepted by `supports_path`, it calls native `chunk_source` and converts the result into a Semble chunk with the selected path and the native start and end lines, while for a rejected path it uses Semble's current chunker. A native support-check or chunking exception is an evaluation error rather than a successful fallback, and a successful run writes JSON whose `mode` is `legacy-cast` and whose `label` is the invocation label.
+3. `chunk-timing` invokes native `chunk_files` independently from retrieval, accepts only a list containing one result for each expected path in the same order, records the count of returned per-file errors, rejects a changed `(files, chunks, errors)` shape across repetitions, and on success writes JSON whose `mode` is `chunk-timing` and whose `label` is the invocation label.
 
 ## Fail
 
 The promise fails when any applicable leg is contradicted:
 
-1. The harness changes production source or persistent cache behavior.
-2. A native-boundary fault becomes a successful fallback measurement.
-3. A timing result accepts missing, reordered, or unstable native output.
+1. `current` bypasses the evaluation seam or Semble's existing chunk-source function, or its successful JSON result omits or mismatches the `current` mode or invocation label.
+2. `legacy-cast` bypasses the evaluation seam; sends a path rejected by `supports_path` to native `chunk_source`; fails to use Semble's current chunker for such a path; loses the selected path or native line metadata while converting a supported-path result; turns a native support-check or chunking exception into a successful fallback measurement; or emits successful JSON that omits or mismatches the `legacy-cast` mode or invocation label.
+3. `chunk-timing` uses a retrieval comparison instead of native `chunk_files`; accepts a non-list, missing, extra, or reordered batch result; fails to record the count of returned per-file errors; accepts a changed `(files, chunks, errors)` shape across repetitions; or emits successful JSON that omits or mismatches the `chunk-timing` mode or invocation label.
 
 ## References
 
