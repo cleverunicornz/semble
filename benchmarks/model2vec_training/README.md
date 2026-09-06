@@ -119,3 +119,11 @@ tests, balanced-data preparation, the non-evidentiary smoke, exact shallow
 materialization of all benchmark repositories, pristine full training, full
 evaluation, environment capture, and result archiving. It is intended for a
 disposable 28-vCPU Linux CPU instance and is externally time-bounded.
+
+`receipts/massed-20260906-a31a6b90.yml` records the complete CPU run. The raw
+candidate improved full-corpus Rust Recall@1 by 5.39 percentage points for
+dense retrieval and 2.91 points for normal hybrid retrieval, with paired 95%
+intervals excluding zero. Across the 63-repository suite, its all-language
+hybrid NDCG@10 was effectively unchanged and its 60-query Rust result moved by
++0.0053, with an interval that includes zero. The evidence is promising but is
+not a deployment qualification.
