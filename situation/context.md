@@ -8,25 +8,26 @@
 
 ## Phase
 
-`EVOLUTION` — the opening tree already provides the source package, CLI entry point, MCP server, and regression suite; this closure adds repository knowledge rather than initial implementation.
+`INITIAL` — this is the first situation context on this branch; the opening tree already contains the package implementation, and this BACKPORT begins its repository-knowledge projection.
 
 ## Implementation map
 
-- `src/semble/` — package implementation; `index/`, `chunking/`, `search.py`, and `ranking/` cover index construction and retrieval.
+- `src/semble/` — package implementation for indexing, chunking, ranking, search, and workspace handling.
 - `src/semble/cli.py` and `src/semble/mcp.py` — command-line and context-bound MCP surfaces.
-- `src/semble/git_workspace.py` and `src/semble/workspace.py` — Git-bound immutable-baseline and changed-workspace service.
-- `tests/` — regression coverage; `.github/workflows/ci.yaml` is inherited workflow evidence, not an assured fork gate route.
+- `src/semble/git_workspace.py` and `src/semble/workspace.py` — Git-bound baseline and changed-workspace services.
+- `benchmarks/` — benchmark fixtures, evaluation scripts, and retained result artifacts, including the evaluation-only native chunker comparison at `benchmarks/chunker_eval.py`.
+- `tests/` — regression suite; `.github/workflows/ci.yaml` is inherited workflow evidence, not an assured fork gate route.
 
 ## Current state
 
-The repository retains upstream-owned source, documentation, configuration, and workflows unchanged. Fork orientation is recorded only in root `AGENTS.md` and `situation/`.
+The repository retains upstream-owned source, documentation, configuration, and workflows unchanged by this closure. Fork orientation lives only in root `AGENTS.md` and `situation/`.
 
 ## Intended state
 
-No fork-specific behavior or assurance commitment is created by this BACKPORT. Future fork changes must establish their own records from observed evidence.
+This BACKPORT records existing repository knowledge without creating a fork-specific production behavior or gate-assurance commitment.
 
 ## Closure state
 
 - Current run: none
-- Last completed closure: run `20260906T195316Z-acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce`, opened at `7580cd4f5819255c9b2ff7e17f007735e9f62d51`
-- Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-10/20260906T195316Z-acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce/`
+- Last completed closure: run `20260906T211928Z-218ec16464c0290c6567e4cb29c3532d594bf75c`, opened at `1e6c4aa506cdd7843dddb19a2fe519480fc986f3`
+- Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-11/20260906T211928Z-218ec16464c0290c6567e4cb29c3532d594bf75c/`

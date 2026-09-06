@@ -1,0 +1,67 @@
+{
+  "tool": "chunker-eval",
+  "mode": "chunk-timing",
+  "label": "smoke-timing-fastapi-t1",
+  "sha": "aa1023c56338c97ed80d2e70843f72b0c35493a1",
+  "native_module": {
+    "name": "code_chunker_native",
+    "path": "/Volumes/code/paseo-worktrees/0yk83afx/native-chunker-evaluation/.venv/lib/python3.13/site-packages/code_chunker_native/__init__.py"
+  },
+  "config": {
+    "repos": [
+      "fastapi"
+    ],
+    "languages": null,
+    "max_size": 1500,
+    "min_size": 50,
+    "threads_requested": 1,
+    "threads": 1,
+    "thread_limit": 14,
+    "repeats": 2
+  },
+  "corpus": {
+    "walked": 48,
+    "valid": 46,
+    "unsupported": 0,
+    "bytes": 701622,
+    "scan_errors": 0,
+    "supported": 46,
+    "repos": [
+      {
+        "repo": "fastapi",
+        "language": "python",
+        "files": 46,
+        "bytes": 701622
+      }
+    ]
+  },
+  "summary": {
+    "wall_median_ms": 23.211604042444378,
+    "wall_min_ms": 22.655708016827703,
+    "wall_max_ms": 23.767500068061054,
+    "mib_per_second_median": 28.84345598358759,
+    "files": 46,
+    "chunks": 453,
+    "errors": 0
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "wall_ms": 23.767500068061054,
+      "mib_per_second": 28.152682415461648,
+      "files": 46,
+      "chunks": 453,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 2,
+      "wall_ms": 22.655708016827703,
+      "mib_per_second": 29.534229551713533,
+      "files": 46,
+      "chunks": 453,
+      "errors": 0,
+      "error_samples": []
+    }
+  ]
+}
