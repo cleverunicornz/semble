@@ -75,3 +75,47 @@ current student on all held-out retrieval metrics (`Recall@1` 0.84 versus
 0.89). It is retained as experiment evidence and is not a deployment
 candidate. The run also exposed a missing Semble-runtime dependency in the
 first wrapper revision; the corrected GPU lock contains those dependencies.
+
+## Full Rust contrastive experiment
+
+The Qwen smoke above is retained as rejected diagnostic evidence. The full
+experiment follows the final retrieval-training stage published in
+`potion-code-16M/train.py`: initialize from `potion-code-16M-v2` and optimize
+real query/document pairs with `MultipleNegativesRankingLoss` in the existing
+embedding space.
+
+The complete pinned Strandset scan produces 30,893 training pairs and 3,750
+crate-disjoint evaluation pairs after exact deduplication. Training uses every
+one of those 30,893 Rust pairs plus exactly 30,893 deterministic replay pairs
+from each original CornStack language: Go, Java, JavaScript, PHP, Python, and
+Ruby. Total full-training size is 216,251 pairs; Rust is neither capped below
+its usable corpus nor diluted below the other individual languages.
+
+`prepare_contrastive.py` streams the six immutable CornStack revisions,
+applies MinishLab's published minimum-length and exact query/document dedup
+filters, excludes any exact overlap with the Rust holdout, and writes an
+attested two-column training JSONL plus separate provenance.
+
+`train_contrastive.py` has two explicit modes. `smoke` runs two steps only to
+qualify wiring. `full` reloads a pristine v2 model and trains all 216,251 pairs
+for three epochs at batch size 512 and learning rate `5e-3`, matching the
+published v1 MNRL settings. It exports both the raw trained vectors and the
+published v1-style PCA/SIF post-processed variant. Training success is never a
+quality result.
+
+`evaluate_full.py` compares potion v1, potion v2, the raw candidate, and the
+post-SIF candidate on two separate surfaces:
+
+- all 3,750 held-out Rust pairs, dense and normal Semble hybrid ranking, with
+  paired bootstrap intervals and exact McNemar top-1 tests, both against the
+  3,750 held-out documents alone and against all 34,643 extracted Rust
+  documents as distractors;
+- every annotated repository in Semble's pinned benchmark suite, including
+  Tokio, Serde, and Axum, with dense and hybrid NDCG@10 reported overall and by
+  language.
+
+`run_cpu_full.sh` performs environment setup, Hub checksum verification, unit
+tests, balanced-data preparation, the non-evidentiary smoke, exact shallow
+materialization of all benchmark repositories, pristine full training, full
+evaluation, environment capture, and result archiving. It is intended for a
+disposable 28-vCPU Linux CPU instance and is externally time-bounded.
