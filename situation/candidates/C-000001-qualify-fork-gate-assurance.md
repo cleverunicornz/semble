@@ -1,6 +1,6 @@
 ## State
 
-proposed
+superseded
 
 ## Candidate
 
@@ -27,4 +27,4 @@ A bounded Promise, Oracle, and evidence-bearing Witness could address the record
 
 ## Disposition
 
-none
+[C-000002](situation/candidates/C-000002-qualify-fork-gate-assurance.md)
