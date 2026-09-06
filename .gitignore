@@ -205,3 +205,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Model2Vec sample preparation (benchmarks/model2vec_data) local data and outputs
+benchmarks/model2vec_data/data/
+benchmarks/model2vec_data/out/
