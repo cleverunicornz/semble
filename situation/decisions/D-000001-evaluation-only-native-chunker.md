@@ -8,7 +8,7 @@ accepted
 
 ## Context
 
-The BACKPORT opening interval introduced a native legacy cAST chunker comparison alongside Semble's existing chunking path. The comparison needed a selected boundary that preserves production behavior while making an unusable native boundary visible to the evaluator.
+The BACKPORT opening trigger tree already contained the donor's native legacy cAST chunker comparison alongside Semble's existing chunking path: pre-opening commits `4a7b4bd442a0d6f3865568799b5cb1d92334ddb7` and `9d2d3e9ba4dc4f986b0aad3f2d51fff7b0dce1ec` introduced the comparison and its failing-support-check treatment before opening checkpoint `3f93c19ba404dd06c09e6fbbcb9740ded5d6bc1f`. The comparison needed a selected boundary that preserves production behavior while making an unusable native boundary visible to the evaluator.
 
 ## Evidence
 
