@@ -8,7 +8,7 @@ Qualify one fork-specific gate claim with a complete recorded assurance route.
 
 ## Origin
 
-[G-000001](../gaps/G-000001-no-assured-fork-gate-route.md)
+[G-000001](situation/gaps/G-000001-no-assured-fork-gate-route.md)
 
 ## Why consider it
 
