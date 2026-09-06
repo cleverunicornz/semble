@@ -389,3 +389,24 @@ uv run python -m benchmarks.plot
 Writes `speed_vs_ndcg_cold.png` and `speed_vs_ndcg_warm.png` to `assets/images/`.
 
 </details>
+
+<details>
+<summary>Model2Vec sample preparation</summary>
+
+Prepares small, reproducible, normalized training/eval samples for the Model2Vec
+distillation experiment from pinned Hugging Face datasets (Rust-only by default;
+TypeScript/Swift pairs and a Kotlin corpus opt in explicitly). See
+[model2vec_data/README.md](model2vec_data/README.md) for pinned `hf download`
+commands, caps, and manifest semantics.
+
+```bash
+uv run --no-project --with pyarrow python -m benchmarks.model2vec_data.prepare \
+  --output benchmarks/model2vec_data/out/model2vec-rust-sample
+```
+
+```bash
+uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --noconftest \
+  tests/benchmarks/test_model2vec_adapters.py tests/benchmarks/test_model2vec_prepare.py
+```
+
+</details>
