@@ -99,6 +99,101 @@ orientation in the shape given by the repository block template published with
 the protocol release and reproduced in the closure automation.
 </bedrock-protocol>
 
+<bedrock-organization>
+## Clever Unicorn operating axioms
+
+These axioms apply to every managed repository. This block is
+organization-owned and synchronized by Bedrock; agents do not edit it.
+Repository-specific orientation belongs in the repository block that follows.
+
+### How we work
+
+- Code is a possibility space: a surface does everything it can do, not what
+  its author meant. A green test proves a behavior exists, never that nothing
+  else happens. Declare what was not collapsed.
+- A gap has three suspects: the code, the requirement, or the instrument.
+  Interrogate in the open before displacing any of them.
+- Situate before acting; re-situate after. Interrogate a contradiction before
+  displacing what it contradicts.
+- Completion is behavior at the promised boundary. Nothing delivered is a
+  stub, placeholder, or deferred branch.
+- Make it first, prove it after: build the slice, prove it, fix, continue.
+- Verify by regenerating from source, never by reading the claim. A gate claim
+  cites a CI run URL, never a local attestation.
+- Predeclare criteria before the run that answers them and judge only against
+  them. A refuted hypothesis is a successful experiment; mixed outcomes stay
+  mixed.
+- The dependency boundary is the assurance boundary. Pinned versions are
+  assured versions and bumps are deliberate acts. A missing capability at a
+  consumed boundary is blocking: stop and escalate rather than work around it.
+- Public-first: before building inside, ask why it cannot be a public crate or
+  repository.
+- Decisions are append-only: supersede, never edit.
+
+### Git and workflows
+
+- Force push does not exist. Nothing pushed is deleted. One writer per ref.
+  Every trunk change lands through a pull request.
+- Passing branch protection and satisfying review requirements make a pull
+  request mergeable; they do not authorize an agent to merge it. An agent
+  opens or updates a pull request and leaves it open unless the active task
+  explicitly authorizes that agent to merge that exact pull request.
+- An owned repository uses `main` as its default working trunk.
+- Pull requests are orchestrated. Workflows trigger on `pull_request` with
+  `types: [opened, reopened, ready_for_review]`, on explicit dispatch, or on a
+  Bedrock request. Branches carry no `push` trigger; `push` to main exists only
+  for release and deployment witnesses. CI runs once when a pull request opens
+  and once on its final head by dispatch before merge.
+- Linux and platform-neutral jobs run on the owned automation fleet through
+  logical labels; WarpBuild only for native macOS and Windows artifacts. Fork
+  pull requests never reach the fleet. A missing host tool is a P0 defect,
+  never a hidden substitute. CI runs the real suite.
+- One fixed toolchain per repository with canonical task names.
+- A pull request that carried a Bedrock closure merges with a merge commit,
+  never a squash or rebase, so its checkpoint commits stay reachable from the
+  trunk.
+- All internal reach rides the tailnet. Public-IP access is break-glass only.
+
+### Forks
+
+- A fork of an upstream repository keeps `main` as its upstream trunk and
+  works on `internal/main`, its default working trunk. Every work branch is
+  `internal/<name>` or `upstream/<name>`; the organization rulesets admit no
+  other name.
+- Both `main` and `internal/main` accept updates only through pull requests.
+- Advancing `main`, including an upstream sync, requires approval from a human
+  fork maintainer. This review gate is independent of authority to execute the
+  merge.
+- `internal/main` has no standing human-review requirement. Bedrock runs there
+  and nowhere else.
+- Contributions travel outward only: cherry-pick from `internal/main` onto an
+  `upstream/<name>` branch cut from `main`, open the pull request into `main`,
+  and from `main` open the pull request to the parent. Bedrock-owned files are
+  never cherry-picked; keep record changes in separate commits from code so a
+  cherry-pick stays clean.
+- During a Bedrock closure, upstream-owned files are not edited, removed, or
+  rewritten merely to impose fork orientation; that orientation lives only in
+  the root blocks and `situation/`. This does not restrict ordinary product
+  work through `internal/main`.
+
+### Tools and knowledge
+
+- Inside a repository, semantic search comes first: `semantic_index_status`,
+  then `semantic_search`, then exact reads. Grep, glob, and broad reads follow
+  semantic results. Outside the repository tree, use `rg` and exact paths.
+- Tool-specific skills live at the harness user level and install with their
+  plugin. Managed repositories carry no skills directory. A repository procedure
+  is a Reference owned by the Invariant that requires it or the Promise it
+  satisfies. Fleet-wide procedures are named plugin skills invoked by exact
+  name and never restated.
+- Scratch work lives under `/Volumes/code/temp/` on the home server and under
+  the job home on a fleet runner. Remove it when the task completes.
+- Bedrock run transcripts are archived outside the repository at
+  `s3://cvu-automation-runs-uk/bedrock/<owner>/<repo>/pr-<number>/<run-id>/` on OVH
+  Object Storage in the UK region. Each closure's opening and closing
+  checkpoint commits carry that URI in a `Bedrock-Transcript` trailer.
+</bedrock-organization>
+
 <bedrock-repository>
 Legacy repository guidance at `3a36c33037fbe7f841bd3a2800d65849c3f09402:AGENTS.md` is BACKPORT donor
 material, not current instruction. Repository-specific orientation will be
