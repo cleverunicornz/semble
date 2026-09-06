@@ -27,6 +27,6 @@ No fork-specific behavior or assurance commitment is created by this BACKPORT. F
 
 ## Closure state
 
-- Current run: `20260906T195316Z-acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce` (open)
-- Last completed closure: none
-- Transcript: none
+- Current run: none
+- Last completed closure: run `20260906T195316Z-acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce`, opened at `7580cd4f5819255c9b2ff7e17f007735e9f62d51`
+- Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-10/20260906T195316Z-acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce/`
