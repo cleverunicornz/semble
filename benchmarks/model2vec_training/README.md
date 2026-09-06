@@ -66,3 +66,12 @@ SOURCE_REVISION=<git-sha> RUN_ID=<run-id> \
 
 The external controller retains the log and retrieves `$ROOT/out/<run-id>.tar.gz`
 before terminating the disposable VM.
+
+## First smoke result
+
+`receipts/massed-20260906-ccd30f4.yml` records the first H100 run. The model
+pipeline and CPU-loading gates passed, but the candidate regressed against the
+current student on all held-out retrieval metrics (`Recall@1` 0.84 versus
+0.89). It is retained as experiment evidence and is not a deployment
+candidate. The run also exposed a missing Semble-runtime dependency in the
+first wrapper revision; the corrected GPU lock contains those dependencies.

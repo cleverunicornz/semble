@@ -1,0 +1,96 @@
+schema_version: 1
+status: smoke-passed-quality-regressed
+run_id: massed-20260906-ccd30f4
+date: '2026-09-06'
+source:
+  repository: cleverunicornz/semble
+  training_revision: ccd30f4f06bd2d954b676b2e68a07da11a99420a
+inputs:
+  dataset:
+    id: Fortytwo-Network/Strandset-Rust-v1
+    revision: 0a8d223302712a2b34a6ad4ce1fd679031894b3d
+  train_pairs:
+    rows: 894
+    sha256: 3f6e2e4e657c899fac48ad7af14c2f2c74e44beb0b67418e3c50b4619634dd68
+  eval_pairs:
+    rows: 100
+    sha256: a605d01165eab7fb81d066b8992953c6a7a59bf2c3ad0df320a5ac9e1ee51db8
+models:
+  teacher:
+    id: Qwen/Qwen3-Embedding-8B
+    revision: 1d8ad4ca9b3dd8059ad90a75d4983776a23d44af
+  student_initialization:
+    id: minishlab/potion-code-16M-v2
+    revision: e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b
+execution:
+  provider: Massed Compute
+  instance_uuid: ca765c82-9ddc-41c1-9003-27be02068176
+  product: gpu_1x_h100
+  gpu: NVIDIA H100 PCIe
+  region: us-central-3
+  price_usd_per_hour: 2.73
+  observed_uptime_seconds_at_disclosure: 741.702
+  estimated_cost_usd_at_disclosure: 0.56245735
+  terminated: true
+  environment:
+    python: 3.12.3
+    torch: 2.10.0
+    torch_cuda: '12.8'
+    transformers: 5.8.0
+    sentence_transformers: 5.5.0
+    model2vec: 0.8.1
+  gpu_peak_allocated_bytes: 16244466688
+timings_seconds:
+  measured_training_pipeline: 60.306073473000026
+  teacher_load: 36.803631736
+  teacher_encode_train: 14.78196428800004
+  teacher_encode_validation: 1.654771745000005
+  teacher_encode_eval: 1.8051302520000263
+  student_training: 3.138204932000008
+training:
+  student_train_pairs: 803
+  student_validation_pairs: 91
+  best_epoch: 7
+  epochs_completed: 12
+  initial_validation_loss: 0.3061978816986084
+  best_validation_loss: 0.30104774236679077
+metrics:
+  teacher:
+    recall_at_1: 0.99
+    recall_at_5: 1.0
+    recall_at_10: 1.0
+    mrr: 0.995
+  baseline:
+    recall_at_1: 0.89
+    recall_at_5: 0.99
+    recall_at_10: 1.0
+    mrr: 0.9372619047619046
+  candidate:
+    recall_at_1: 0.84
+    recall_at_5: 0.95
+    recall_at_10: 0.96
+    mrr: 0.8922348392348391
+  candidate_minus_baseline:
+    recall_at_1: -0.050000000000000044
+    recall_at_5: -0.040000000000000036
+    recall_at_10: -0.040000000000000036
+    mrr: -0.04502706552706548
+gates:
+  training_smoke: passed
+  remote_cpu_load_and_search: passed-after-runtime-dependency-repair
+  independent_local_cpu_load_and_search: passed
+  candidate_dimension: 256
+  candidate_pad_vector_norm: 0.0
+  candidate_min_batch_invariance_cosine: 0.9999997615814209
+artifacts:
+  local_directory: benchmarks/model2vec_training/out/massed-20260906-ccd30f4
+  archive_sha256: 0dc2368ec9ed8135010ab2f09968aa8974530c48766229447907abd9378c44c1
+  model_safetensors:
+    bytes: 32490072
+    sha256: c58493144d3a503feb9c429a3a86ad172c56d89c233f3b27c580cecaf9a222e0
+boundary: >-
+  The 100-pair held-out result is a smoke signal, not a production retrieval
+  benchmark. The candidate regressed on every reported retrieval metric and is
+  not a deployment candidate. The committed wrapper initially omitted Semble
+  runtime dependencies; those exact pins were installed before the successful
+  CPU verification and are included in the corrected lock.

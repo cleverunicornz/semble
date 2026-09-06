@@ -22,6 +22,7 @@ from benchmarks.model2vec_training.core import (
     static_batch_invariance,
     static_retrieval_vectors,
 )
+from semble.index import dense as dense_module
 from semble.index.dense import SelectableBasicBackend, embed_chunks, load_model
 from semble.search import _search_semantic
 from semble.types import Chunk
@@ -68,6 +69,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "search_returns_results": bool(results),
         "batch_invariant": batch_cosine >= 0.99999,
     }
+    source_path = Path(dense_module.__file__).resolve()
     receipt: dict[str, Any] = {
         "schema_version": 1,
         "tool": "benchmarks.model2vec_training.verify_smoke",
@@ -94,7 +96,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "environment": {
             "python": platform.python_version(),
             "model2vec": _version("model2vec"),
-            "semble": _version("semble"),
+            "semble_distribution": _version("semble"),
+            "semble_source": {"path": str(source_path), "sha256": sha256_file(source_path)},
         },
         "gates": gates,
     }
