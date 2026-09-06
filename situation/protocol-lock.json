@@ -1,0 +1,30 @@
+{
+  "repository": "cleverunicornz/yeetz-bedrock-protocol",
+  "release": "v1.9.2",
+  "commit": "c788b062df8fe2778f3ce1b6decebdc878f0e086",
+  "automation_package": {
+    "repository": "cleverunicornz/infrastructure",
+    "version": "1.1.4",
+    "source_commit": "12a1452771f310a67f20c7608d55107122f26bae"
+  },
+  "root_protocol": {
+    "source": "templates/root-protocol.md",
+    "sha256": "57107adb1462500e605bdbe03597baa66736fe029281cb82ff0e74a34fde25ed"
+  },
+  "files": {
+    "situation/AGENTS.md": "0453210ee4f31fe373b1c3c3f4192c7fda2ddb9423d389cfc7c1aa17e0f73fba",
+    "situation/candidates/AGENTS.md": "93a93fec5fdf78e9a847d3fe19f4a6b041f9221ee101e9a6d78d841a3eec10c9",
+    "situation/decisions/AGENTS.md": "35cb11346c4b2c9543e73b9fd1a742ee175730f3a84aca7dd19a2d1dadceb9a2",
+    "situation/gaps/AGENTS.md": "e5d13ac237706188e030b3cbf27443ec9afa4db2645c80695a41ab2e3c011b83",
+    "situation/invariants/AGENTS.md": "0c1d2ff334e419d4c057dcf3bc615899bfbe9ad2824c4e1d2b1cc588b8bd7c4f",
+    "situation/oracles/AGENTS.md": "48b42f0602e95183c581acf39d067e12b36026492d2811ffff3bd144cfbf3402",
+    "situation/plans/AGENTS.md": "5b84a08ecc490f4fc666f1beb0dae70d7c06ffc66db8e0cd356144a24dce5051",
+    "situation/promises/AGENTS.md": "9b8ec140d2d9915f8151b8f8277288ad49e58188a9cc41b6900736a1b2a60429",
+    "situation/references/AGENTS.md": "41698ac88408a3b07eb141646ddd5f0acbfd4bd7fcdc49655e959a1f77b8a559",
+    "situation/witnesses/AGENTS.md": "982ee98b719dd752599cf5a6585d18e604b849f598fa21f36cb2492b2e410cb5"
+  },
+  "organization": {
+    "version": "1.1.1",
+    "sha256": "6c858cf26c5e8a5b8d9e336169830a7e1c440105f1a3bc3921f98c510ec1837c"
+  }
+}
