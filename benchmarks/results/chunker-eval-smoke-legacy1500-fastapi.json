@@ -1,0 +1,1870 @@
+{
+  "tool": "chunker-eval",
+  "mode": "legacy-cast",
+  "label": "smoke-legacy1500-fastapi",
+  "model": "minishlab/potion-code-16M-v2",
+  "sha": "aa1023c56338c97ed80d2e70843f72b0c35493a1",
+  "config": {
+    "repos": [
+      "fastapi"
+    ],
+    "languages": null,
+    "latency_runs": 5,
+    "top_k": 10,
+    "native_max_size": 1500,
+    "native_min_size": 50,
+    "persistent_index_cache": "bypassed with a fresh temporary directory"
+  },
+  "native_module": {
+    "name": "code_chunker_native",
+    "path": "/Volumes/code/paseo-worktrees/0yk83afx/native-chunker-evaluation/.venv/lib/python3.13/site-packages/code_chunker_native/__init__.py"
+  },
+  "chunk_source": {
+    "calls": 46,
+    "wall_ms": 23.084044,
+    "mean_ms": 0.5018270434782609,
+    "native_files": 46,
+    "native_chunks": 453,
+    "fallback_files": 0,
+    "fallback_chunks": 0,
+    "native_errors": 0
+  },
+  "summary": {
+    "repos": 1,
+    "queries": 20,
+    "files": 46,
+    "chunks": 453,
+    "ndcg5": 0.7065,
+    "ndcg10": 0.7726,
+    "query_ndcg10": 0.7726,
+    "recall10": 0.9583,
+    "query_recall10": 0.9583,
+    "tokens": 3429.0,
+    "p50_ms": 0.581,
+    "p90_ms": 5.745,
+    "p95_ms": 5.855,
+    "p99_ms": 6.014,
+    "index_ms": 199.0,
+    "index_total_ms": 199.0,
+    "by_category": {
+      "architecture": 0.7364,
+      "semantic": 0.6623,
+      "symbol": 1.0
+    }
+  },
+  "by_language": {
+    "python": {
+      "repos": 1,
+      "files": 46,
+      "chunks": 453,
+      "tokens": 3429.0,
+      "ndcg10": 0.7726,
+      "recall10": 0.9583,
+      "p50_ms": 0.581,
+      "p90_ms": 5.745,
+      "p95_ms": 5.855,
+      "p99_ms": 6.014,
+      "index_ms": 199.0,
+      "index_total_ms": 199.0
+    }
+  },
+  "repos": [
+    {
+      "repo": "fastapi",
+      "language": "python",
+      "mode": "legacy-cast",
+      "files": 46,
+      "chunks": 453,
+      "tokens": 3429,
+      "ndcg5": 0.7064805280040641,
+      "ndcg10": 0.7726428844026758,
+      "recall10": 0.9583333333333334,
+      "p50_ms": 0.5805835244245827,
+      "p90_ms": 5.74464580276981,
+      "p95_ms": 5.85542056360282,
+      "p99_ms": 6.0144513763953,
+      "index_ms": 198.9617079962045,
+      "chunk_source": {
+        "calls": 46,
+        "wall_ms": 23.084044,
+        "mean_ms": 0.5018270434782609,
+        "native_files": 46,
+        "native_chunks": 453,
+        "fallback_files": 0,
+        "fallback_chunks": 0,
+        "native_errors": 0
+      },
+      "by_category": {
+        "architecture": 0.736401752912994,
+        "semantic": 0.6622556772078199,
+        "symbol": 1.0
+      }
+    }
+  ],
+  "queries": [
+    {
+      "repo": "fastapi",
+      "ordinal": 0,
+      "language": "python",
+      "category": "architecture",
+      "query": "how does dependency injection work",
+      "targets": [
+        {
+          "path": "fastapi/dependencies/utils.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/dependencies/models.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/params.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        null,
+        9
+      ],
+      "ndcg5": 0.46927872602275644,
+      "ndcg10": 0.6105456988825855,
+      "recall10": 0.6666666666666666,
+      "p50_ms": 0.518541899509728,
+      "tokens": 2661,
+      "top": [
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 459,
+          "end_line": 488,
+          "score": 0.018617701297672786
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 236,
+          "end_line": 267,
+          "score": 0.01672848580186797
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2283,
+          "end_line": 2316,
+          "score": 0.016528164482341304
+        },
+        {
+          "file": "routing.py",
+          "start_line": 457,
+          "end_line": 467,
+          "score": 0.015709874866472403
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 1,
+          "end_line": 40,
+          "score": 0.01327198955654187
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 59,
+          "end_line": 106,
+          "score": 0.012208593577455676
+        },
+        {
+          "file": "applications.py",
+          "start_line": 931,
+          "end_line": 986,
+          "score": 0.011707523315300268
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 223,
+          "end_line": 254,
+          "score": 0.011465982453167413
+        },
+        {
+          "file": "params.py",
+          "start_line": 745,
+          "end_line": 754,
+          "score": 0.010873507160442645
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 224,
+          "end_line": 256,
+          "score": 0.007817758866791496
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 1,
+      "language": "python",
+      "category": "semantic",
+      "query": "request validation and error handling",
+      "targets": [
+        {
+          "path": "fastapi/exceptions.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/exception_handlers.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        5,
+        4
+      ],
+      "ndcg5": 0.5012658353418871,
+      "ndcg10": 0.5012658353418871,
+      "recall10": 1.0,
+      "p50_ms": 0.5425829440355301,
+      "tokens": 2790,
+      "top": [
+        {
+          "file": "routing.py",
+          "start_line": 719,
+          "end_line": 731,
+          "score": 0.019066834804539724
+        },
+        {
+          "file": "applications.py",
+          "start_line": 986,
+          "end_line": 1022,
+          "score": 0.017067557033661956
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 456,
+          "end_line": 480,
+          "score": 0.01643088381325484
+        },
+        {
+          "file": "exception_handlers.py",
+          "start_line": 1,
+          "end_line": 34,
+          "score": 0.01608737798506624
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 161,
+          "end_line": 223,
+          "score": 0.01586011341496032
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 951,
+          "end_line": 1000,
+          "score": 0.014404490306143712
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 202,
+          "end_line": 223,
+          "score": 0.013159603998494144
+        },
+        {
+          "file": "security/open_id_connect_url.py",
+          "start_line": 87,
+          "end_line": 94,
+          "score": 0.012359379161322364
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 642,
+          "end_line": 652,
+          "score": 0.011754618454995798
+        },
+        {
+          "file": "utils.py",
+          "start_line": 58,
+          "end_line": 102,
+          "score": 0.011533896806830876
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 2,
+      "language": "python",
+      "category": "architecture",
+      "query": "how are routes registered",
+      "targets": [
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/applications.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        2
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 0.4623749991878867,
+      "tokens": 3668,
+      "top": [
+        {
+          "file": "routing.py",
+          "start_line": 1690,
+          "end_line": 1734,
+          "score": 0.019077220942140295
+        },
+        {
+          "file": "applications.py",
+          "start_line": 986,
+          "end_line": 1022,
+          "score": 0.017367531616087103
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 481,
+          "end_line": 513,
+          "score": 0.017085120531227575
+        },
+        {
+          "file": "middleware/asyncexitstack.py",
+          "start_line": 1,
+          "end_line": 18,
+          "score": 0.010337580658011302
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1089,
+          "end_line": 1165,
+          "score": 0.007874503968253968
+        },
+        {
+          "file": "sse.py",
+          "start_line": 110,
+          "end_line": 145,
+          "score": 0.007517279131093572
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 531,
+          "end_line": 576,
+          "score": 0.007318376068376068
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 101,
+          "end_line": 137,
+          "score": 0.0073136381579501355
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1520,
+          "end_line": 1535,
+          "score": 0.00614630467571644
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2372,
+          "end_line": 2425,
+          "score": 0.005222076827242824
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 3,
+      "language": "python",
+      "category": "semantic",
+      "query": "websocket endpoint implementation",
+      "targets": [
+        {
+          "path": "fastapi/websockets.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        2
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 0.4801250761374831,
+      "tokens": 3629,
+      "top": [
+        {
+          "file": "websockets.py",
+          "start_line": 1,
+          "end_line": 3,
+          "score": 0.021322713086286096
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1481,
+          "end_line": 1569,
+          "score": 0.01920122887864823
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1282,
+          "end_line": 1362,
+          "score": 0.0168437556856019
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 86,
+          "end_line": 160,
+          "score": 0.016393039427368368
+        },
+        {
+          "file": "exception_handlers.py",
+          "start_line": 1,
+          "end_line": 34,
+          "score": 0.014781813294180983
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 230,
+          "end_line": 259,
+          "score": 0.013728894158419437
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 598,
+          "end_line": 612,
+          "score": 0.011554572318742694
+        },
+        {
+          "file": "routing.py",
+          "start_line": 732,
+          "end_line": 768,
+          "score": 0.007944514501891552
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 161,
+          "end_line": 223,
+          "score": 0.007302771855010661
+        },
+        {
+          "file": "__init__.py",
+          "start_line": 1,
+          "end_line": 25,
+          "score": 0.0064371663899798655
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 4,
+      "language": "python",
+      "category": "semantic",
+      "query": "OpenAPI schema generation",
+      "targets": [
+        {
+          "path": "fastapi/openapi/utils.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/openapi/models.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        6,
+        2
+      ],
+      "ndcg5": 0.38685280723454163,
+      "ndcg10": 0.6052602440527057,
+      "recall10": 1.0,
+      "p50_ms": 5.733500001952052,
+      "tokens": 3961,
+      "top": [
+        {
+          "file": "applications.py",
+          "start_line": 1072,
+          "end_line": 1106,
+          "score": 0.017064981236421094
+        },
+        {
+          "file": "openapi/models.py",
+          "start_line": 185,
+          "end_line": 206,
+          "score": 0.01679126315324551
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1620,
+          "end_line": 1674,
+          "score": 0.015635720989647238
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 1223,
+          "end_line": 1289,
+          "score": 0.015122430623273115
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 101,
+          "end_line": 137,
+          "score": 0.011181954790474418
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 180,
+          "end_line": 229,
+          "score": 0.010898778104305996
+        },
+        {
+          "file": "applications.py",
+          "start_line": 876,
+          "end_line": 931,
+          "score": 0.006749649368863955
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 243,
+          "end_line": 302,
+          "score": 0.006135200240891298
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1929,
+          "end_line": 1997,
+          "score": 0.006118881118881119
+        },
+        {
+          "file": "openapi/models.py",
+          "start_line": 123,
+          "end_line": 126,
+          "score": 0.005820354015593991
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 5,
+      "language": "python",
+      "category": "semantic",
+      "query": "middleware stack and CORS",
+      "targets": [
+        {
+          "path": "fastapi/middleware/cors.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/applications.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        7
+      ],
+      "ndcg5": 0.6131471927654584,
+      "ndcg10": 0.8175295903539445,
+      "recall10": 1.0,
+      "p50_ms": 0.5421669920906425,
+      "tokens": 1628,
+      "top": [
+        {
+          "file": "middleware/cors.py",
+          "start_line": 1,
+          "end_line": 1,
+          "score": 0.029408911936248575
+        },
+        {
+          "file": "middleware/asyncexitstack.py",
+          "start_line": 1,
+          "end_line": 18,
+          "score": 0.02193458897171461
+        },
+        {
+          "file": "middleware/wsgi.py",
+          "start_line": 1,
+          "end_line": 3,
+          "score": 0.02074412782891761
+        },
+        {
+          "file": "middleware/httpsredirect.py",
+          "start_line": 1,
+          "end_line": 3,
+          "score": 0.020518587588018687
+        },
+        {
+          "file": "middleware/gzip.py",
+          "start_line": 1,
+          "end_line": 1,
+          "score": 0.02042678318010349
+        },
+        {
+          "file": "middleware/trustedhost.py",
+          "start_line": 1,
+          "end_line": 3,
+          "score": 0.019712095851264565
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1025,
+          "end_line": 1067,
+          "score": 0.018996319306429057
+        },
+        {
+          "file": "routing.py",
+          "start_line": 383,
+          "end_line": 402,
+          "score": 0.01866330390920555
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 612,
+          "end_line": 629,
+          "score": 0.01431476341959245
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 15,
+          "end_line": 59,
+          "score": 0.01139016610650354
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 6,
+      "language": "python",
+      "category": "semantic",
+      "query": "file upload handling",
+      "targets": [
+        {
+          "path": "fastapi/datastructures.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        2
+      ],
+      "ndcg5": 0.6309297535714575,
+      "ndcg10": 0.6309297535714575,
+      "recall10": 1.0,
+      "p50_ms": 0.5289589753374457,
+      "tokens": 3198,
+      "top": [
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 67,
+          "end_line": 93,
+          "score": 0.017372509270838395
+        },
+        {
+          "file": "datastructures.py",
+          "start_line": 22,
+          "end_line": 104,
+          "score": 0.017284541704419835
+        },
+        {
+          "file": "routing.py",
+          "start_line": 383,
+          "end_line": 402,
+          "score": 0.01723826147411552
+        },
+        {
+          "file": "applications.py",
+          "start_line": 4704,
+          "end_line": 4749,
+          "score": 0.01661258007930707
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 17,
+          "end_line": 85,
+          "score": 0.01563927400228246
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 230,
+          "end_line": 259,
+          "score": 0.013167675255890684
+        },
+        {
+          "file": "background.py",
+          "start_line": 1,
+          "end_line": 61,
+          "score": 0.012710385646386293
+        },
+        {
+          "file": "params.py",
+          "start_line": 663,
+          "end_line": 664,
+          "score": 0.012123283756313769
+        },
+        {
+          "file": "datastructures.py",
+          "start_line": 104,
+          "end_line": 152,
+          "score": 0.008000512032770097
+        },
+        {
+          "file": "__init__.py",
+          "start_line": 1,
+          "end_line": 25,
+          "score": 0.007978530120421832
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 7,
+      "language": "python",
+      "category": "semantic",
+      "query": "response model serialization",
+      "targets": [
+        {
+          "path": "fastapi/encoders.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        null,
+        2
+      ],
+      "ndcg5": 0.38685280723454163,
+      "ndcg10": 0.38685280723454163,
+      "recall10": 0.5,
+      "p50_ms": 0.4858750617131591,
+      "tokens": 3375,
+      "top": [
+        {
+          "file": "applications.py",
+          "start_line": 1195,
+          "end_line": 1222,
+          "score": 0.016412944338545638
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1449,
+          "end_line": 1481,
+          "score": 0.01628369199585993
+        },
+        {
+          "file": "openapi/models.py",
+          "start_line": 207,
+          "end_line": 272,
+          "score": 0.011480551254135319
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1251,
+          "end_line": 1282,
+          "score": 0.006841817186644773
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 107,
+          "end_line": 116,
+          "score": 0.006290730173215674
+        },
+        {
+          "file": "routing.py",
+          "start_line": 4490,
+          "end_line": 4537,
+          "score": 0.006283068783068783
+        },
+        {
+          "file": "utils.py",
+          "start_line": 58,
+          "end_line": 102,
+          "score": 0.005869812370559175
+        },
+        {
+          "file": "_compat/v2.py",
+          "start_line": 281,
+          "end_line": 330,
+          "score": 0.004019893709676183
+        },
+        {
+          "file": "applications.py",
+          "start_line": 3773,
+          "end_line": 3815,
+          "score": 0.003242729676140119
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 260,
+          "end_line": 270,
+          "score": 0.003048780487804878
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 8,
+      "language": "python",
+      "category": "semantic",
+      "query": "running work after returning an HTTP response without blocking",
+      "targets": [
+        {
+          "path": "fastapi/background.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        6
+      ],
+      "ndcg5": 0.0,
+      "ndcg10": 0.3562071871080222,
+      "recall10": 1.0,
+      "p50_ms": 0.5807500565424562,
+      "tokens": 4038,
+      "top": [
+        {
+          "file": "routing.py",
+          "start_line": 534,
+          "end_line": 587,
+          "score": 0.01920122887864823
+        },
+        {
+          "file": "applications.py",
+          "start_line": 3773,
+          "end_line": 3815,
+          "score": 0.015246742273396924
+        },
+        {
+          "file": "concurrency.py",
+          "start_line": 1,
+          "end_line": 41,
+          "score": 0.013800123616092732
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 410,
+          "end_line": 456,
+          "score": 0.012851893468764261
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2316,
+          "end_line": 2339,
+          "score": 0.012731317844883206
+        },
+        {
+          "file": "background.py",
+          "start_line": 1,
+          "end_line": 61,
+          "score": 0.012562789899570867
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 223,
+          "end_line": 254,
+          "score": 0.009892661693294849
+        },
+        {
+          "file": "sse.py",
+          "start_line": 43,
+          "end_line": 110,
+          "score": 0.00820810185512952
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 224,
+          "end_line": 256,
+          "score": 0.007402518010094725
+        },
+        {
+          "file": "responses.py",
+          "start_line": 1,
+          "end_line": 25,
+          "score": 0.007130853856212582
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 9,
+      "language": "python",
+      "category": "semantic",
+      "query": "security and OAuth2 authentication",
+      "targets": [
+        {
+          "path": "fastapi/security/oauth2.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/security/http.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        2
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 0.5285419756546617,
+      "tokens": 3351,
+      "top": [
+        {
+          "file": "security/oauth2.py",
+          "start_line": 434,
+          "end_line": 442,
+          "score": 0.03200204813108039
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 223,
+          "end_line": 254,
+          "score": 0.019617587225187923
+        },
+        {
+          "file": "security/open_id_connect_url.py",
+          "start_line": 12,
+          "end_line": 87,
+          "score": 0.017954790357627946
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 1,
+          "end_line": 56,
+          "score": 0.017187296706144377
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 308,
+          "end_line": 372,
+          "score": 0.01491958223105814
+        },
+        {
+          "file": "openapi/models.py",
+          "start_line": 333,
+          "end_line": 398,
+          "score": 0.014131305200626706
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 442,
+          "end_line": 517,
+          "score": 0.014055856096529307
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2425,
+          "end_line": 2460,
+          "score": 0.012481309970332257
+        },
+        {
+          "file": "security/base.py",
+          "start_line": 1,
+          "end_line": 6,
+          "score": 0.011727017385571515
+        },
+        {
+          "file": "security/utils.py",
+          "start_line": 1,
+          "end_line": 7,
+          "score": 0.011361465872674573
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 10,
+      "language": "python",
+      "category": "architecture",
+      "query": "how is response validation and serialization applied before sending",
+      "targets": [
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/encoders.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        9
+      ],
+      "ndcg5": 0.6131471927654584,
+      "ndcg10": 0.7977228895450266,
+      "recall10": 1.0,
+      "p50_ms": 0.6430000066757202,
+      "tokens": 3742,
+      "top": [
+        {
+          "file": "routing.py",
+          "start_line": 4108,
+          "end_line": 4155,
+          "score": 0.013116772000059977
+        },
+        {
+          "file": "applications.py",
+          "start_line": 2696,
+          "end_line": 2743,
+          "score": 0.012923613995846952
+        },
+        {
+          "file": "responses.py",
+          "start_line": 56,
+          "end_line": 85,
+          "score": 0.009269896885364854
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2316,
+          "end_line": 2339,
+          "score": 0.009003185873337531
+        },
+        {
+          "file": "sse.py",
+          "start_line": 110,
+          "end_line": 145,
+          "score": 0.008217545650773097
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 130,
+          "end_line": 153,
+          "score": 0.008114699128106587
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 456,
+          "end_line": 480,
+          "score": 0.00790914122941951
+        },
+        {
+          "file": "params.py",
+          "start_line": 74,
+          "end_line": 133,
+          "score": 0.007666883101155896
+        },
+        {
+          "file": "encoders.py",
+          "start_line": 202,
+          "end_line": 242,
+          "score": 0.007220442356539739
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 459,
+          "end_line": 488,
+          "score": 0.006564038505945218
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 11,
+      "language": "python",
+      "category": "architecture",
+      "query": "how are nested and sub-dependencies resolved",
+      "targets": [
+        {
+          "path": "fastapi/dependencies/utils.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 0.5804169923067093,
+      "tokens": 3911,
+      "top": [
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 629,
+          "end_line": 681,
+          "score": 0.02401383196721312
+        },
+        {
+          "file": "routing.py",
+          "start_line": 769,
+          "end_line": 812,
+          "score": 0.01668934628640517
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2283,
+          "end_line": 2316,
+          "score": 0.016094989872451487
+        },
+        {
+          "file": "applications.py",
+          "start_line": 334,
+          "end_line": 401,
+          "score": 0.014290300666712951
+        },
+        {
+          "file": "dependencies/models.py",
+          "start_line": 33,
+          "end_line": 86,
+          "score": 0.011410196764932533
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 172,
+          "end_line": 191,
+          "score": 0.010279795107391288
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 236,
+          "end_line": 267,
+          "score": 0.010158438589393469
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2372,
+          "end_line": 2425,
+          "score": 0.007392911502500543
+        },
+        {
+          "file": "sse.py",
+          "start_line": 110,
+          "end_line": 145,
+          "score": 0.007373509255140912
+        },
+        {
+          "file": "utils.py",
+          "start_line": 58,
+          "end_line": 102,
+          "score": 0.007268173408638899
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 12,
+      "language": "python",
+      "category": "architecture",
+      "query": "how does FastAPI run sync route functions without blocking",
+      "targets": [
+        {
+          "path": "fastapi/concurrency.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        4,
+        3
+      ],
+      "ndcg5": 0.5706417189553201,
+      "ndcg10": 0.5706417189553201,
+      "recall10": 1.0,
+      "p50_ms": 6.05420907959342,
+      "tokens": 3987,
+      "top": [
+        {
+          "file": "applications.py",
+          "start_line": 1,
+          "end_line": 46,
+          "score": 0.03299637569003766
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2339,
+          "end_line": 2371,
+          "score": 0.01846232998943293
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1231,
+          "end_line": 1269,
+          "score": 0.01726897875999258
+        },
+        {
+          "file": "concurrency.py",
+          "start_line": 1,
+          "end_line": 41,
+          "score": 0.013220725592702981
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 197,
+          "end_line": 254,
+          "score": 0.010139352024717361
+        },
+        {
+          "file": "applications.py",
+          "start_line": 334,
+          "end_line": 401,
+          "score": 0.008915458563345887
+        },
+        {
+          "file": "datastructures.py",
+          "start_line": 22,
+          "end_line": 104,
+          "score": 0.007914045245708158
+        },
+        {
+          "file": "cli.py",
+          "start_line": 1,
+          "end_line": 13,
+          "score": 0.0076742256928079115
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2425,
+          "end_line": 2460,
+          "score": 0.007638279568866888
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1089,
+          "end_line": 1165,
+          "score": 0.007318376068376068
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 13,
+      "language": "python",
+      "category": "architecture",
+      "query": "how are path parameters extracted and type-converted",
+      "targets": [
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/dependencies/utils.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        3,
+        6
+      ],
+      "ndcg5": 0.3065735963827292,
+      "ndcg10": 0.5249810332008933,
+      "recall10": 1.0,
+      "p50_ms": 0.6707499269396067,
+      "tokens": 3522,
+      "top": [
+        {
+          "file": "param_functions.py",
+          "start_line": 13,
+          "end_line": 95,
+          "score": 0.016807929708884884
+        },
+        {
+          "file": "applications.py",
+          "start_line": 2038,
+          "end_line": 2106,
+          "score": 0.012934565434565436
+        },
+        {
+          "file": "routing.py",
+          "start_line": 2688,
+          "end_line": 2756,
+          "score": 0.01215096861918619
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 135,
+          "end_line": 179,
+          "score": 0.009101331324828217
+        },
+        {
+          "file": "types.py",
+          "start_line": 1,
+          "end_line": 12,
+          "score": 0.009071646426640014
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 393,
+          "end_line": 400,
+          "score": 0.008783718797716389
+        },
+        {
+          "file": "params.py",
+          "start_line": 137,
+          "end_line": 140,
+          "score": 0.008480600240524078
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 137,
+          "end_line": 196,
+          "score": 0.008424872876596974
+        },
+        {
+          "file": "exceptions.py",
+          "start_line": 1,
+          "end_line": 16,
+          "score": 0.007255661564112789
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 357,
+          "end_line": 423,
+          "score": 0.0071838089093580505
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 14,
+      "language": "python",
+      "category": "architecture",
+      "query": "how does exception propagation work through dependency injection",
+      "targets": [
+        {
+          "path": "fastapi/dependencies/utils.py",
+          "start_line": null,
+          "end_line": null
+        },
+        {
+          "path": "fastapi/routing.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        2,
+        4
+      ],
+      "ndcg5": 0.6509209298071326,
+      "ndcg10": 0.6509209298071326,
+      "recall10": 1.0,
+      "p50_ms": 0.5386249395087361,
+      "tokens": 3047,
+      "top": [
+        {
+          "file": "exceptions.py",
+          "start_line": 224,
+          "end_line": 256,
+          "score": 0.017823974360304237
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 459,
+          "end_line": 488,
+          "score": 0.01778552746294682
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 236,
+          "end_line": 267,
+          "score": 0.015783506593912224
+        },
+        {
+          "file": "routing.py",
+          "start_line": 457,
+          "end_line": 467,
+          "score": 0.014678402955188876
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1025,
+          "end_line": 1067,
+          "score": 0.014595745110429001
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2283,
+          "end_line": 2316,
+          "score": 0.014428871732163232
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 1,
+          "end_line": 68,
+          "score": 0.01168534662845572
+        },
+        {
+          "file": "security/open_id_connect_url.py",
+          "start_line": 1,
+          "end_line": 12,
+          "score": 0.01130503265162004
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 59,
+          "end_line": 106,
+          "score": 0.010764200052543428
+        },
+        {
+          "file": "exception_handlers.py",
+          "start_line": 1,
+          "end_line": 34,
+          "score": 0.009952886002322092
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 15,
+      "language": "python",
+      "category": "symbol",
+      "query": "Depends",
+      "targets": [
+        {
+          "path": "fastapi/params.py",
+          "start_line": 746,
+          "end_line": 749
+        },
+        {
+          "path": "fastapi/param_functions.py",
+          "start_line": null,
+          "end_line": null
+        }
+      ],
+      "target_ranks": [
+        1,
+        2
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 5.233250092715025,
+      "tokens": 3188,
+      "top": [
+        {
+          "file": "params.py",
+          "start_line": 745,
+          "end_line": 754,
+          "score": 0.07234097324480768
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2248,
+          "end_line": 2283,
+          "score": 0.06747109256894823
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 459,
+          "end_line": 488,
+          "score": 0.01914972320416032
+        },
+        {
+          "file": "routing.py",
+          "start_line": 769,
+          "end_line": 812,
+          "score": 0.018039000676206663
+        },
+        {
+          "file": "applications.py",
+          "start_line": 334,
+          "end_line": 401,
+          "score": 0.015440786401432845
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 106,
+          "end_line": 140,
+          "score": 0.014395201282274797
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 236,
+          "end_line": 267,
+          "score": 0.014166981565036027
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 310,
+          "end_line": 359,
+          "score": 0.007794361525704808
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2339,
+          "end_line": 2371,
+          "score": 0.007481377813670033
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 15,
+          "end_line": 59,
+          "score": 0.0072714435808396705
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 16,
+      "language": "python",
+      "category": "symbol",
+      "query": "HTTPException",
+      "targets": [
+        {
+          "path": "fastapi/exceptions.py",
+          "start_line": 17,
+          "end_line": 66
+        }
+      ],
+      "target_ranks": [
+        1
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 4.157375078648329,
+      "tokens": 3987,
+      "top": [
+        {
+          "file": "exceptions.py",
+          "start_line": 17,
+          "end_line": 85,
+          "score": 0.07378100721358938
+        },
+        {
+          "file": "routing.py",
+          "start_line": 402,
+          "end_line": 457,
+          "score": 0.01851194262065278
+        },
+        {
+          "file": "applications.py",
+          "start_line": 986,
+          "end_line": 1022,
+          "score": 0.018244441549755807
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 69,
+          "end_line": 106,
+          "score": 0.01808292150603049
+        },
+        {
+          "file": "exception_handlers.py",
+          "start_line": 1,
+          "end_line": 34,
+          "score": 0.01633435530801976
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 401,
+          "end_line": 434,
+          "score": 0.01596931404572376
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 1,
+          "end_line": 56,
+          "score": 0.014822158662990774
+        },
+        {
+          "file": "security/open_id_connect_url.py",
+          "start_line": 12,
+          "end_line": 87,
+          "score": 0.013342458950998061
+        },
+        {
+          "file": "encoders.py",
+          "start_line": 299,
+          "end_line": 347,
+          "score": 0.012003519259713373
+        },
+        {
+          "file": "requests.py",
+          "start_line": 1,
+          "end_line": 2,
+          "score": 0.01193073904529135
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 17,
+      "language": "python",
+      "category": "symbol",
+      "query": "APIRouter",
+      "targets": [
+        {
+          "path": "fastapi/routing.py",
+          "start_line": 1005,
+          "end_line": 1030
+        }
+      ],
+      "target_ranks": [
+        1
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 5.844958010129631,
+      "tokens": 3397,
+      "top": [
+        {
+          "file": "routing.py",
+          "start_line": 978,
+          "end_line": 1006,
+          "score": 0.06776639344262295
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1362,
+          "end_line": 1425,
+          "score": 0.01858504271293219
+        },
+        {
+          "file": "security/api_key.py",
+          "start_line": 56,
+          "end_line": 87,
+          "score": 0.010964615711725606
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1690,
+          "end_line": 1734,
+          "score": 0.009836065573770493
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1535,
+          "end_line": 1567,
+          "score": 0.007567630597014924
+        },
+        {
+          "file": "__init__.py",
+          "start_line": 1,
+          "end_line": 25,
+          "score": 0.00459661497509401
+        },
+        {
+          "file": "openapi/utils.py",
+          "start_line": 230,
+          "end_line": 259,
+          "score": 0.004425360641547077
+        },
+        {
+          "file": "routing.py",
+          "start_line": 1006,
+          "end_line": 1032,
+          "score": 0.004032258064516129
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 101,
+          "end_line": 137,
+          "score": 0.0034394219696511465
+        },
+        {
+          "file": "applications.py",
+          "start_line": 931,
+          "end_line": 986,
+          "score": 0.003420289855072464
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 18,
+      "language": "python",
+      "category": "symbol",
+      "query": "BackgroundTasks",
+      "targets": [
+        {
+          "path": "fastapi/background.py",
+          "start_line": 11,
+          "end_line": 39
+        }
+      ],
+      "target_ranks": [
+        1
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 3.037541056983173,
+      "tokens": 3440,
+      "top": [
+        {
+          "file": "background.py",
+          "start_line": 1,
+          "end_line": 61,
+          "score": 0.07347888679434432
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 729,
+          "end_line": 737,
+          "score": 0.01888662897124029
+        },
+        {
+          "file": "routing.py",
+          "start_line": 587,
+          "end_line": 620,
+          "score": 0.017195828447735068
+        },
+        {
+          "file": "dependencies/models.py",
+          "start_line": 33,
+          "end_line": 86,
+          "score": 0.009449622301350278
+        },
+        {
+          "file": "__init__.py",
+          "start_line": 1,
+          "end_line": 25,
+          "score": 0.007807907098310732
+        },
+        {
+          "file": "dependencies/utils.py",
+          "start_line": 685,
+          "end_line": 729,
+          "score": 0.007776442307692307
+        },
+        {
+          "file": "routing.py",
+          "start_line": 333,
+          "end_line": 350,
+          "score": 0.006948051948051947
+        },
+        {
+          "file": "applications.py",
+          "start_line": 1025,
+          "end_line": 1067,
+          "score": 0.004972381803873965
+        },
+        {
+          "file": "middleware/asyncexitstack.py",
+          "start_line": 1,
+          "end_line": 18,
+          "score": 0.004809182778365766
+        },
+        {
+          "file": "concurrency.py",
+          "start_line": 1,
+          "end_line": 41,
+          "score": 0.003945996125838578
+        }
+      ]
+    },
+    {
+      "repo": "fastapi",
+      "ordinal": 19,
+      "language": "python",
+      "category": "symbol",
+      "query": "OAuth2PasswordBearer",
+      "targets": [
+        {
+          "path": "fastapi/security/oauth2.py",
+          "start_line": 433,
+          "end_line": 471
+        }
+      ],
+      "target_ranks": [
+        1
+      ],
+      "ndcg5": 1.0,
+      "ndcg10": 1.0,
+      "recall10": 1.0,
+      "p50_ms": 3.9812499890103936,
+      "tokens": 4079,
+      "top": [
+        {
+          "file": "security/oauth2.py",
+          "start_line": 401,
+          "end_line": 434,
+          "score": 0.07242494813488995
+        },
+        {
+          "file": "openapi/models.py",
+          "start_line": 333,
+          "end_line": 398,
+          "score": 0.014837327176543463
+        },
+        {
+          "file": "openapi/docs.py",
+          "start_line": 308,
+          "end_line": 372,
+          "score": 0.013797968876689066
+        },
+        {
+          "file": "security/http.py",
+          "start_line": 1,
+          "end_line": 68,
+          "score": 0.013152264122064057
+        },
+        {
+          "file": "param_functions.py",
+          "start_line": 2425,
+          "end_line": 2460,
+          "score": 0.011438615386449916
+        },
+        {
+          "file": "security/oauth2.py",
+          "start_line": 59,
+          "end_line": 130,
+          "score": 0.009494659814596355
+        },
+        {
+          "file": "applications.py",
+          "start_line": 401,
+          "end_line": 473,
+          "score": 0.008871075644440328
+        },
+        {
+          "file": "security/__init__.py",
+          "start_line": 1,
+          "end_line": 15,
+          "score": 0.008255662879546493
+        },
+        {
+          "file": "encoders.py",
+          "start_line": 68,
+          "end_line": 112,
+          "score": 0.007466152224729633
+        },
+        {
+          "file": "datastructures.py",
+          "start_line": 153,
+          "end_line": 186,
+          "score": 0.007303728352123307
+        }
+      ]
+    }
+  ]
+}

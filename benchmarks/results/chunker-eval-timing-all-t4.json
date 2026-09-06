@@ -1,0 +1,482 @@
+{
+  "tool": "chunker-eval",
+  "mode": "chunk-timing",
+  "label": "timing-all-t4",
+  "sha": "aa1023c56338c97ed80d2e70843f72b0c35493a1",
+  "native_module": {
+    "name": "code_chunker_native",
+    "path": "/Volumes/code/paseo-worktrees/0yk83afx/native-chunker-evaluation/.venv/lib/python3.13/site-packages/code_chunker_native/__init__.py"
+  },
+  "config": {
+    "repos": null,
+    "languages": null,
+    "max_size": 750,
+    "min_size": 25,
+    "threads_requested": 4,
+    "threads": 4,
+    "thread_limit": 14,
+    "repeats": 7
+  },
+  "corpus": {
+    "walked": 9568,
+    "valid": 9564,
+    "unsupported": 7298,
+    "bytes": 16613847,
+    "scan_errors": 0,
+    "supported": 2266,
+    "repos": [
+      {
+        "repo": "abseil-cpp",
+        "language": "cpp",
+        "files": 4,
+        "bytes": 19475
+      },
+      {
+        "repo": "aeson",
+        "language": "haskell",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "aiohttp",
+        "language": "python",
+        "files": 53,
+        "bytes": 867706
+      },
+      {
+        "repo": "alamofire",
+        "language": "swift",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "axios",
+        "language": "javascript",
+        "files": 63,
+        "bytes": 162957
+      },
+      {
+        "repo": "axum",
+        "language": "rust",
+        "files": 58,
+        "bytes": 616016
+      },
+      {
+        "repo": "bash-it",
+        "language": "bash",
+        "files": 343,
+        "bytes": 722724
+      },
+      {
+        "repo": "bats-core",
+        "language": "bash",
+        "files": 8,
+        "bytes": 53924
+      },
+      {
+        "repo": "cats",
+        "language": "scala",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "chi",
+        "language": "go",
+        "files": 74,
+        "bytes": 285195
+      },
+      {
+        "repo": "circe",
+        "language": "scala",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "click",
+        "language": "python",
+        "files": 17,
+        "bytes": 384243
+      },
+      {
+        "repo": "cobra",
+        "language": "go",
+        "files": 36,
+        "bytes": 508959
+      },
+      {
+        "repo": "commons-lang",
+        "language": "java",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "curl",
+        "language": "c",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "dapper",
+        "language": "csharp",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "ecto",
+        "language": "elixir",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "exposed",
+        "language": "kotlin",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "express",
+        "language": "javascript",
+        "files": 6,
+        "bytes": 61813
+      },
+      {
+        "repo": "fastapi",
+        "language": "python",
+        "files": 46,
+        "bytes": 701622
+      },
+      {
+        "repo": "flask",
+        "language": "python",
+        "files": 24,
+        "bytes": 347617
+      },
+      {
+        "repo": "fmtlib",
+        "language": "cpp",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "gin",
+        "language": "go",
+        "files": 99,
+        "bytes": 680619
+      },
+      {
+        "repo": "gson",
+        "language": "java",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "guzzle",
+        "language": "php",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "http4s",
+        "language": "scala",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "httpx",
+        "language": "python",
+        "files": 23,
+        "bytes": 284402
+      },
+      {
+        "repo": "jackson-databind",
+        "language": "java",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "kotlinx-coroutines",
+        "language": "kotlin",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "ktor",
+        "language": "kotlin",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "laravel-framework",
+        "language": "php",
+        "files": 4,
+        "bytes": 9254
+      },
+      {
+        "repo": "lazy.nvim",
+        "language": "lua",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "libuv",
+        "language": "c",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "messagepack-csharp",
+        "language": "csharp",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "mini.nvim",
+        "language": "lua",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "model2vec",
+        "language": "python",
+        "files": 24,
+        "bytes": 114093
+      },
+      {
+        "repo": "monolog",
+        "language": "php",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "newtonsoft-json",
+        "language": "csharp",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "nlohmann-json",
+        "language": "cpp",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "nvm",
+        "language": "bash",
+        "files": 6,
+        "bytes": 183031
+      },
+      {
+        "repo": "pandoc",
+        "language": "haskell",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "phoenix",
+        "language": "elixir",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "plug",
+        "language": "elixir",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "pydantic",
+        "language": "python",
+        "files": 103,
+        "bytes": 1771881
+      },
+      {
+        "repo": "rack",
+        "language": "ruby",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "rails",
+        "language": "ruby",
+        "files": 2,
+        "bytes": 1612
+      },
+      {
+        "repo": "redis",
+        "language": "c",
+        "files": 1,
+        "bytes": 903
+      },
+      {
+        "repo": "redux",
+        "language": "javascript",
+        "files": 17,
+        "bytes": 54162
+      },
+      {
+        "repo": "requests",
+        "language": "python",
+        "files": 18,
+        "bytes": 186871
+      },
+      {
+        "repo": "serde",
+        "language": "rust",
+        "files": 208,
+        "bytes": 1246660
+      },
+      {
+        "repo": "sinatra",
+        "language": "ruby",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "snapkit",
+        "language": "swift",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "starlette",
+        "language": "python",
+        "files": 34,
+        "bytes": 241981
+      },
+      {
+        "repo": "telescope.nvim",
+        "language": "lua",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "tokio",
+        "language": "rust",
+        "files": 375,
+        "bytes": 3429864
+      },
+      {
+        "repo": "trpc",
+        "language": "typescript",
+        "files": 107,
+        "bytes": 387284
+      },
+      {
+        "repo": "vapor",
+        "language": "swift",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "vitest",
+        "language": "typescript",
+        "files": 236,
+        "bytes": 1168007
+      },
+      {
+        "repo": "xmonad",
+        "language": "haskell",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "zig",
+        "language": "zig",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "zig-clap",
+        "language": "zig",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "zls",
+        "language": "zig",
+        "files": 0,
+        "bytes": 0
+      },
+      {
+        "repo": "zod",
+        "language": "typescript",
+        "files": 277,
+        "bytes": 2120972
+      }
+    ]
+  },
+  "summary": {
+    "wall_median_ms": 283.2993329502642,
+    "wall_min_ms": 276.9654579460621,
+    "wall_max_ms": 362.973083043471,
+    "mib_per_second_median": 55.927414355700655,
+    "files": 2266,
+    "chunks": 26432,
+    "errors": 0
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "wall_ms": 279.61783402133733,
+      "mib_per_second": 56.66376479904345,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 2,
+      "wall_ms": 362.973083043471,
+      "mib_per_second": 43.65116842205478,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 3,
+      "wall_ms": 276.9654579460621,
+      "mib_per_second": 57.20640869118279,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 4,
+      "wall_ms": 285.5099170701578,
+      "mib_per_second": 55.494391729691344,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 5,
+      "wall_ms": 290.97320791333914,
+      "mib_per_second": 54.452433247125356,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 6,
+      "wall_ms": 276.9983330508694,
+      "mib_per_second": 57.199619239922704,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    },
+    {
+      "repetition": 7,
+      "wall_ms": 283.2993329502642,
+      "mib_per_second": 55.927414355700655,
+      "files": 2266,
+      "chunks": 26432,
+      "errors": 0,
+      "error_samples": []
+    }
+  ]
+}
