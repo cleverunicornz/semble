@@ -195,7 +195,13 @@ Repository-specific orientation belongs in the repository block that follows.
 </bedrock-organization>
 
 <bedrock-repository>
-Legacy repository guidance at `3a36c33037fbe7f841bd3a2800d65849c3f09402:AGENTS.md` is BACKPORT donor
-material, not current instruction. Repository-specific orientation will be
-authored during this closure.
+## semble
+
+- Identity: This repository is the Clever Unicorn fork of the Python `semble` code-search package and produces a library, CLI, and context-bound MCP server for coding agents.
+- Ownership: `UPSTREAM_FORK` — public upstream: https://github.com/MinishLab/semble. Synchronization and contribution follow the organization's fork rules in the root organization block.
+- Phase and implementation map: `situation/context.md`.
+- Critical invariants: none.
+- Verification: Unassured — no assured witness route is presently recorded for fork gate claims; [G-000001](situation/gaps/G-000001-no-assured-fork-gate-route.md) retains the absence and [C-000001](situation/candidates/C-000001-qualify-fork-gate-assurance.md) proposes qualification without promoting it.
+- Tool priority: organization defaults.
+- Donor boundary: `acecfcfcb88c2ba4a4f47c74a2e68abed0baf0ce` (the BACKPORT trigger head named by opening checkpoint `7580cd4f5819255c9b2ff7e17f007735e9f62d51`).
 </bedrock-repository>
