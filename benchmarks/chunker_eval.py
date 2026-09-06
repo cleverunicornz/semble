@@ -122,8 +122,19 @@ class VariantChunker:
     def __call__(self, source: str, file_path: str, language: str | None) -> list[Chunk]:
         """Chunk one source with native dispatch only when its path is supported."""
         started = time.perf_counter_ns()
-        using_native = self._native is not None and bool(self._native.supports_path(file_path))
         try:
+            if self._native is None:
+                chunks = self._current(source, file_path, language)
+                self._counters.fallback_files += 1
+                self._counters.fallback_chunks += len(chunks)
+                return chunks
+
+            try:
+                using_native = bool(self._native.supports_path(file_path))
+            except Exception as exc:
+                self._counters.native_errors += 1
+                raise ChunkerEvalError(f"native support check failed for {file_path!r}: {exc}") from exc
+
             if not using_native:
                 chunks = self._current(source, file_path, language)
                 self._counters.fallback_files += 1
