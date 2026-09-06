@@ -201,6 +201,7 @@ def adapt_typescript_row(row: Mapping[str, object], *, row_id: str, max_field_by
     code = _required_text(row, "code", max_field_bytes=max_field_bytes)
     if isinstance(code, Skip):
         return code
+    repo = _optional_str(row, "repo")
     provenance = {
         key: value for key in ("func_name", "path", "url", "license") if (value := _optional_str(row, key)) is not None
     }

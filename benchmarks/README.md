@@ -405,7 +405,7 @@ uv run --no-project --with pyarrow python -m benchmarks.model2vec_data.prepare \
 ```
 
 ```bash
-uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --noconftest \
+uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --rootdir=. --noconftest \
   tests/benchmarks/test_model2vec_adapters.py tests/benchmarks/test_model2vec_prepare.py
 ```
 

@@ -192,7 +192,7 @@ Focused tests use tiny local JSONL fixtures and run with only pytest. Disable
 the production conftest and coverage configuration for this isolated run:
 
 ```bash
-uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --noconftest \
+uv run --no-project --with pytest==9.0.3 python -m pytest -c /dev/null --rootdir=. --noconftest \
   tests/benchmarks/test_model2vec_adapters.py tests/benchmarks/test_model2vec_prepare.py
 ```
 
