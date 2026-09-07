@@ -16,14 +16,14 @@ implemented
 
 - P1: The full preparation stage rejects mismatched Rust identities, preserves holdout separation, and produces the required balanced training manifest.
 - P2: Full training writes reloadable raw and post-SIF candidates with finite 256-dimensional vectors and preserved tokenizer bytes.
-- P3: Full evaluation accepts only complete valid models and records both declared Rust retrieval surfaces and the complete pinned repository suite with paired comparisons.
+- P3: The fixed four-model full-run invocation evaluates potion-v2, potion-v1, raw, and post-SIF candidates on both declared Rust retrieval surfaces and the complete pinned repository suite with paired comparisons.
 - P4: Retained evidence identifies its source and artifact identities and explicitly keeps the resulting candidates as experiment evidence rather than a deployment decision.
 
 ## Fail
 
 - F1: A mismatched Rust input, manifest, holdout overlap, or incomplete balanced training corpus proceeds as a full experiment.
 - F2: A missing, non-finite, non-256-dimensional, or tokenizer-altering candidate is reported as a successful full training result.
-- F3: An incomplete model set, invalid evaluation surface, or incomplete pinned repository suite is reported as a successful full evaluation.
+- F3: A full-run invocation that omits any of the fixed four models, an invalid evaluation surface, or an incomplete pinned repository suite is reported as a successful full evaluation.
 - F4: The retained result lacks the provenance needed to identify its run or represents a candidate as selected or deployed.
 
 ## Implementation
@@ -36,9 +36,9 @@ implemented
 |---|---|---|
 | P1 | Validate the complete Rust inputs and construct balanced heldout-excluding replay data | `benchmarks/model2vec_training/prepare_contrastive.py::validate_rust_inputs`; `benchmarks/model2vec_training/prepare_contrastive.py::prepare`; `tests/benchmarks/test_model2vec_contrastive.py::test_replay_selection_applies_length_dedup_and_holdout` |
 | P2 | Train and reload raw/post-SIF candidate artifacts with required mechanical gates | `benchmarks/model2vec_training/train_contrastive.py::train`; `tests/benchmarks/test_model2vec_contrastive.py::test_build_and_raw_export_preserve_tokenizer` |
-| P3 | Evaluate the full Rust and repository surfaces with valid model inputs | `benchmarks/model2vec_training/evaluate_full.py::evaluate`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_dense_ranks_use_supplied_full_corpus_positions`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_model_spec_parsing_requires_unique_complete_paths` |
+| P3 | The fixed wrapper supplies all four comparison models; evaluation records both Rust surfaces, the repository suite, and paired comparisons | `benchmarks/model2vec_training/run_cpu_full.sh` (fixed four `--model` arguments); `benchmarks/model2vec_training/evaluate_full.py::evaluate`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_dense_ranks_use_supplied_full_corpus_positions` |
 | P4 | Retain provenance and the non-deployment boundary with the result | manual |
 | F1 | Bad identity, holdout overlap, or wrong balanced corpus stops the preparation path | `benchmarks/model2vec_training/prepare_contrastive.py::validate_rust_inputs`; `benchmarks/model2vec_training/prepare_contrastive.py::prepare` |
 | F2 | Failed full-training gates prevent a passing training receipt | `benchmarks/model2vec_training/train_contrastive.py::train` |
-| F3 | Invalid models or incomplete evaluation surfaces prevent a passing evaluation receipt | `benchmarks/model2vec_training/evaluate_full.py::parse_model_specs`; `benchmarks/model2vec_training/evaluate_full.py::evaluate` |
+| F3 | The full wrapper declares all four comparison models; supplied paths and false evaluation gates prevent a successful receipt | `benchmarks/model2vec_training/run_cpu_full.sh` (fixed four `--model` arguments); `benchmarks/model2vec_training/evaluate_full.py::parse_model_specs`; `benchmarks/model2vec_training/evaluate_full.py::evaluate` |
 | F4 | Missing provenance or a deployment interpretation fails the retained-evidence judgment | manual |
