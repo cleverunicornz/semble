@@ -127,3 +127,12 @@ intervals excluding zero. Across the 63-repository suite, its all-language
 hybrid NDCG@10 was effectively unchanged and its 60-query Rust result moved by
 +0.0053, with an interval that includes zero. The evidence is promising but is
 not a deployment qualification.
+
+`receipts/massed-20260907-1b2adaac.yml` records the full reproduction. The
+prepared data, raw weights, post-SIF weights, training loss, dense metrics, and
+all real-repository aggregates reproduce exactly. Synthetic pair-corpus hybrid
+metrics have small tie-order variance because all synthetic chunks use the same
+start line while candidate union ordering comes from a Python set; the original
+run did not pin `PYTHONHASHSEED`. The full data, model, logs, evaluation, and
+comparison are preserved in private Hugging Face repositories pinned by the
+receipt, plus a persistent local mirror outside Paseo worktrees.

@@ -1,0 +1,91 @@
+schema_version: 1
+status: reproduction-passed-artifacts-preserved-termination-pending
+run_id: rust-repro-20260907
+date: '2026-09-07'
+reproduces:
+  run_id: mc-a31a6b90-20260906
+  receipt: benchmarks/model2vec_training/receipts/massed-20260906-a31a6b90.yml
+source:
+  repository: cleverunicornz/semble
+  revision: f586c664ae121da213910daabf7d8b3dd1ea81b2
+  archive_sha256: 18263e40829fa3b64ce58ded1995ab404c9049cedbdba763218ccff4ad7b0b0a
+data:
+  exact_original_match: true
+  rust_train_sha256: 80d925621777cc890727a4bfe09fb39f12458e183c56b948c8238bf2f755a9c0
+  rust_eval_sha256: 7c68fc4086008a989dc86984786ce6330a54dc46575de25b2c37d1e5ab7a9966
+  rust_manifest_sha256: f914690f7f4ebd1f2382ced53c8769b75e9a269645d25aed960d114f2d24ba19
+  balanced_train_sha256: 5e1f9468ea35bd1746dcd4e34d95c80e5a2b4dd4f369012d7eac86e34cf452cd
+  balanced_provenance_sha256: 7b2b5315ce3efc974dc10a636298a8a1e709f907edb9faf27c34bca0ee44c7bf
+  balanced_rows: 216251
+training:
+  exact_original_model_match: true
+  candidate_raw_safetensors_sha256: 6732ea99e934612cc53b732445bfefaab49d59eac288ab3eecd8b7e7339823cb
+  candidate_post_sif_safetensors_sha256: 98b385d3028e63fa2ae4e2646a97001e985b2179a79ed52ac88585a281b0e844
+  loss: 0.629271470814638
+  changed_vocabulary_rows: 52183
+  duration_seconds: 229.99430900700008
+  original_duration_seconds: 231.18135089800012
+evaluation:
+  status: passed
+  duration_seconds: 3814.2760209489998
+  original_duration_seconds: 3824.5642210190003
+  held_out_queries: 3750
+  full_rust_corpus_documents: 34643
+  repositories: 63
+  repository_queries_per_mode: 1251
+  exact_surfaces:
+    all_dense_metrics: true
+    all_real_repository_aggregates: true
+    all_real_repository_comparisons: true
+  synthetic_hybrid_tie_variance:
+    exact_summary_leaf_values: 253
+    different_summary_leaf_values: 108
+    differences_confined_to_synthetic_hybrid: true
+    cause: process-random set order retained for equal start-line and score ties
+    original_candidate_raw_full_corpus_recall_at_1: 0.42906666666666665
+    reproduced_candidate_raw_full_corpus_recall_at_1: 0.4296
+    original_potion_v2_full_corpus_recall_at_1: 0.4
+    reproduced_potion_v2_full_corpus_recall_at_1: 0.3992
+    original_candidate_delta: 0.029066666666666668
+    reproduced_candidate_delta: 0.0304
+    conclusion_changed: false
+storage:
+  dataset:
+    repository: cleverunicornz/semble-model2vec-rust-data
+    private: true
+    revision: d3a7aaf37a4f71164283f955f1d51ec4ff1cf4dd
+    tag: rust-repro-20260907
+    independently_downloaded_and_verified: true
+  model:
+    repository: cleverunicornz/semble-model2vec-rust
+    private: true
+    revision: 55fdc1ba6abe43a66ccf162b9e3e26860ad52c02
+    tag: rust-repro-20260907
+    independently_downloaded_loaded_and_verified: true
+  persistent_local_mirror: /Volumes/code/artifacts/semble/model2vec/rust-repro-20260907
+artifacts:
+  data_checkpoint_sha256: 172fca3be2a0a1ffc1598de68d68f91d8c7d707cf82247c861f482133013336d
+  model_checkpoint_sha256: 31b1ca7e87564951d1c76dcb08746ee291ec8116ba4ba0ef7131c4202549b7bd
+  final_archive_bytes: 183881149
+  final_archive_sha256: 326b8bca62312f1c4edf10ff1c6577c792f6b5fbec4030790bd91db599cd5732
+  evaluation_json_sha256: 906166bed132a9aee54694d182020bfb5ed72b56382f9d6e3b26bd1899c88933
+  evaluation_summary_sha256: 7a371fdeeef5158265b2af419d5d98bc633291a8543053f6da2849fd3709ddbf
+  comparison_json_sha256: b999540604e5e2422b0473af757b9ebd6b8b18ba0e855de7fc0f4595c7353c1d
+execution:
+  provider: Massed Compute
+  instance_uuid: 1b2adaac-7580-46b9-a357-28f5f5453557
+  product: cpu_medium_amd_epyc
+  region: us-central-3
+  cpu: AMD EPYC 7702P
+  vcpus: 28
+  memory_gib: 80
+  price_usd_per_hour: 0.44
+  created_at: '2026-09-07T12:20:30Z'
+  terminated: false
+  termination_pending: true
+boundary: >-
+  The training data and both model weight files reproduced byte-for-byte. Dense
+  and real-repository results reproduced exactly. Synthetic hybrid metrics
+  retain small tie-order variance because the historical evaluator did not use
+  a total deterministic candidate key or pin PYTHONHASHSEED. The candidate is
+  preserved experiment evidence and is not deployed by this run.
