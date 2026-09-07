@@ -4,7 +4,7 @@ implemented
 
 ## Promise
 
-With valid explicitly supplied prepared data, local model snapshots, and the route's required execution environment, the Model2Vec training benchmark provides two bounded routes. The GPU smoke route checks its prepared sample, trains an exported static candidate, and invokes CPU load, encode, and search verification. The CPU full route exports raw and post-SIF candidates and emits full comparison evidence only for `potion-v1`, `potion-v2`, `candidate-raw`, and `candidate-post-sif`, with `potion-v2` as the baseline.
+With valid explicitly supplied prepared data, local model snapshots, and the route's required execution environment, the Model2Vec training benchmark provides two bounded routes. The GPU smoke route checks its prepared sample, trains an exported static candidate, and invokes CPU load, encode, and search verification. The CPU full route validates its complete pinned Rust inputs, constructs attested balanced training data that excludes held-out Rust content from replay, materializes benchmark repositories at their manifest revisions, exports raw and post-SIF candidates, and emits full comparison evidence only for `potion-v1`, `potion-v2`, `candidate-raw`, and `candidate-post-sif`, with `potion-v2` as the baseline.
 
 ## Scope
 
@@ -16,7 +16,7 @@ This promise covers the Model2Vec benchmark implementation under `benchmarks/mod
 
 ## State evidence
 
-- `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/run_gpu_smoke.sh`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/run_cpu_full.sh`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/train_smoke.py`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/train_contrastive.py`, and `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/evaluate_full.py` are the implementation introduced by the trigger head.
+- `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/prepare_contrastive.py`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/sync_evaluation_repos.py`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/run_gpu_smoke.sh`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/run_cpu_full.sh`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/train_smoke.py`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/verify_smoke.py`, `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/train_contrastive.py`, and `54cd1f1645cf0b73b39eecffe503341508e0cf80:benchmarks/model2vec_training/evaluate_full.py` are the implementation introduced by the trigger head.
 - [D-000002](situation/decisions/D-000002-model2vec-benchmark-boundary.md) records the benchmark-only direct-static-student decision.
 
 ## Residual

@@ -17,16 +17,18 @@ implemented
 The promise passes only when all of these legs hold within its Scope:
 
 1. The GPU route requires the prepared sample inputs, invokes smoke training, and invokes CPU verification with CUDA hidden.
-2. The CPU full route invokes contrastive training to create raw and post-SIF candidate artifacts from its supplied base model.
-3. Full comparison accepts exactly the fixed four model labels and `potion-v2` baseline before it emits comparison evidence.
+2. The CPU full route validates its complete pinned Rust inputs, excludes held-out Rust content while constructing balanced replay data, and materializes each benchmark repository at its manifest revision.
+3. The CPU full route invokes contrastive training to create raw and post-SIF candidate artifacts from its supplied base model.
+4. Full comparison accepts exactly the fixed four model labels and `potion-v2` baseline before it emits comparison evidence.
 
 ## Fail
 
 The promise fails when any applicable leg is contradicted within its Scope:
 
 1. The GPU route omits a required prepared sample input, bypasses smoke training, or bypasses CPU verification with CUDA hidden.
-2. The CPU full route fails to invoke contrastive training for the raw and post-SIF candidates from its supplied base model.
-3. Full comparison accepts an incomplete or shifted label set, or a baseline other than `potion-v2`.
+2. The CPU full route accepts incomplete or unpinned Rust inputs, retains held-out Rust content in replay, or accepts a benchmark checkout other than its manifest revision.
+3. The CPU full route fails to invoke contrastive training for the raw and post-SIF candidates from its supplied base model.
+4. Full comparison accepts an incomplete or shifted label set, or a baseline other than `potion-v2`.
 
 ## Implementation
 
@@ -45,8 +47,10 @@ The promise fails when any applicable leg is contradicted within its Scope:
 | Leg | Decision | Coverage |
 |---|---|---|
 | P1 | GPU preparation, smoke, and CPU-verification sequence is invoked | `benchmarks/model2vec_training/run_gpu_smoke.sh`; `tests/benchmarks/test_model2vec_training_smoke.py::test_full_smoke_and_cpu_verification` |
-| P2 | CPU full route invokes contrastive training for both candidate outputs | `benchmarks/model2vec_training/run_cpu_full.sh`; `tests/benchmarks/test_model2vec_contrastive.py::test_build_and_raw_export_preserve_tokenizer` |
-| P3 | Exact full-comparison labels and baseline are required | `benchmarks/model2vec_training/evaluate_full.py::validate_comparison_specs`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_comparison_requires_all_four_models_and_v2_baseline` |
+| P2 | Pinned Rust inputs, held-out exclusion, and exact repository materialization are decided | `benchmarks/model2vec_training/prepare_contrastive.py::validate_rust_inputs`; `benchmarks/model2vec_training/sync_evaluation_repos.py::sync_one`; `tests/benchmarks/test_model2vec_contrastive.py::test_replay_selection_applies_length_dedup_and_holdout` |
+| P3 | CPU full route invokes contrastive training for both candidate outputs | `benchmarks/model2vec_training/run_cpu_full.sh`; `tests/benchmarks/test_model2vec_contrastive.py::test_build_and_raw_export_preserve_tokenizer` |
+| P4 | Exact full-comparison labels and baseline are required | `benchmarks/model2vec_training/evaluate_full.py::validate_comparison_specs`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_comparison_requires_all_four_models_and_v2_baseline` |
 | F1 | Missing inputs or a bypassed GPU sequence terminate the route | `benchmarks/model2vec_training/run_gpu_smoke.sh`; `tests/benchmarks/test_model2vec_training_smoke.py::test_full_smoke_and_cpu_verification` |
-| F2 | Missing contrastive candidate generation terminates the CPU route | `benchmarks/model2vec_training/run_cpu_full.sh`; `benchmarks/model2vec_training/train_contrastive.py::train` |
-| F3 | Incomplete, shifted, or wrong-baseline comparisons are rejected | `benchmarks/model2vec_training/evaluate_full.py::validate_comparison_specs`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_comparison_requires_all_four_models_and_v2_baseline` |
+| F2 | Unpinned or incomplete Rust inputs, held-out replay overlap, and wrong checkout revisions are rejected | `benchmarks/model2vec_training/prepare_contrastive.py::validate_rust_inputs`; `benchmarks/model2vec_training/sync_evaluation_repos.py::sync_one`; `tests/benchmarks/test_model2vec_contrastive.py::test_replay_selection_applies_length_dedup_and_holdout` |
+| F3 | Missing contrastive candidate generation terminates the CPU route | `benchmarks/model2vec_training/run_cpu_full.sh`; `benchmarks/model2vec_training/train_contrastive.py::train` |
+| F4 | Incomplete, shifted, or wrong-baseline comparisons are rejected | `benchmarks/model2vec_training/evaluate_full.py::validate_comparison_specs`; `tests/benchmarks/test_model2vec_full_evaluation.py::test_comparison_requires_all_four_models_and_v2_baseline` |
