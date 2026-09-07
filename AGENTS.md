@@ -49,10 +49,14 @@ the repository; both checkpoint commits carry the archive URI in a
 `Bedrock-Transcript` trailer alongside their other trailers. The checkpoint
 commits are the only writers of the closure state in `situation/context.md`.
 
-A failed run is never resumed. An opening checkpoint with no closing checkpoint
-marks a failed closure: the pull request is closed with a pointer to its rerun,
-and the rerun starts on a new branch from the head admitted before the failed
-run. The failed branch and its comments remain the record.
+A failed run is never resumed. The orchestrator retries an invoked agent that
+died by restarting that same agent with the same prompt, at most three times,
+and never adjudicates or finishes that agent's work itself. A run that still
+fails leaves its pull request open and its branch untouched: Bedrock never
+opens, closes, merges, or rebranches a pull request under any circumstance.
+Re-requesting Bedrock on the same pull request starts a new run; an opening
+checkpoint with no closing checkpoint marks a failed closure and is superseded
+by the next run's opening checkpoint.
 
 A record is immutable from the first closing checkpoint that follows its
 creation or change. Until then, on the open pull request, it may be corrected
