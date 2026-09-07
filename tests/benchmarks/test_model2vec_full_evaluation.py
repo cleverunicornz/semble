@@ -16,6 +16,7 @@ from benchmarks.model2vec_training.evaluate_full import (
     paired_rank_comparison,
     parse_model_specs,
     rank_summary,
+    validate_comparison_specs,
 )
 
 
@@ -79,3 +80,19 @@ def test_model_spec_parsing_requires_unique_complete_paths(tmp_path) -> None:
     assert parse_model_specs([f"baseline={model}"])[0].label == "baseline"
     with __import__("pytest").raises(ValueError, match="duplicate"):
         parse_model_specs([f"same={model}", f"same={model}"])
+
+
+def test_comparison_requires_all_four_models_and_v2_baseline(tmp_path) -> None:
+    """Decision evaluation rejects incomplete model sets and a shifted baseline."""
+    paths = {}
+    for label in ("potion-v1", "potion-v2", "candidate-raw", "candidate-post-sif"):
+        path = tmp_path / label
+        path.mkdir()
+        (path / "config.json").write_text("{}\n", encoding="utf-8")
+        paths[label] = path
+    specs = parse_model_specs([f"{label}={path}" for label, path in paths.items()])
+    validate_comparison_specs(specs, "potion-v2")
+    with __import__("pytest").raises(ValueError, match="model labels must be exactly"):
+        validate_comparison_specs(specs[:-1], "potion-v2")
+    with __import__("pytest").raises(ValueError, match="baseline label must be"):
+        validate_comparison_specs(specs, "potion-v1")

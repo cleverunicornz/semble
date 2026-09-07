@@ -19,8 +19,21 @@ data:
   balanced_rows: 216251
 training:
   exact_original_model_match: true
-  candidate_raw_safetensors_sha256: 6732ea99e934612cc53b732445bfefaab49d59eac288ab3eecd8b7e7339823cb
-  candidate_post_sif_safetensors_sha256: 98b385d3028e63fa2ae4e2646a97001e985b2179a79ed52ac88585a281b0e844
+  base_tokenizer_sha256: 107bbdcbad4bff1d299b7a4c3a2fb17c52890688b7dd0e4c9deab79d3c4f3d45
+  candidate_raw:
+    dimensions: 256
+    loads: true
+    vectors_finite: true
+    tokenizer_preserved: true
+    tokenizer_sha256: 107bbdcbad4bff1d299b7a4c3a2fb17c52890688b7dd0e4c9deab79d3c4f3d45
+    safetensors_sha256: 6732ea99e934612cc53b732445bfefaab49d59eac288ab3eecd8b7e7339823cb
+  candidate_post_sif:
+    dimensions: 256
+    loads: true
+    vectors_finite: true
+    tokenizer_preserved: true
+    tokenizer_sha256: 107bbdcbad4bff1d299b7a4c3a2fb17c52890688b7dd0e4c9deab79d3c4f3d45
+    safetensors_sha256: 98b385d3028e63fa2ae4e2646a97001e985b2179a79ed52ac88585a281b0e844
   loss: 0.629271470814638
   changed_vocabulary_rows: 52183
   duration_seconds: 229.99430900700008

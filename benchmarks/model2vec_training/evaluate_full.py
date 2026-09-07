@@ -35,6 +35,8 @@ from semble.types import Chunk
 
 LOGGER = logging.getLogger(__name__)
 ENCODE_BATCH_SIZE = 1_024
+REQUIRED_MODEL_LABELS = frozenset({"potion-v1", "potion-v2", "candidate-raw", "candidate-post-sif"})
+REQUIRED_BASELINE_LABEL = "potion-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +89,17 @@ def parse_model_specs(values: list[str]) -> list[ModelSpec]:
         labels.add(label)
         specs.append(ModelSpec(label, path))
     return specs
+
+
+def validate_comparison_specs(specs: list[ModelSpec], baseline_label: str) -> None:
+    """Require the complete fixed comparison used for decision evidence."""
+    labels = {spec.label for spec in specs}
+    if labels != REQUIRED_MODEL_LABELS:
+        raise ValueError(
+            f"model labels must be exactly {sorted(REQUIRED_MODEL_LABELS)}, received {sorted(labels)}"
+        )
+    if baseline_label != REQUIRED_BASELINE_LABEL:
+        raise ValueError(f"baseline label must be {REQUIRED_BASELINE_LABEL!r}")
 
 
 def _normalize(values: np.ndarray) -> np.ndarray:
@@ -562,8 +575,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if args.bootstrap_resamples < 1:
         raise ValueError("bootstrap_resamples must be positive")
     specs = parse_model_specs(args.model)
-    if args.baseline_label not in {spec.label for spec in specs}:
-        raise ValueError("baseline label is not among the supplied models")
+    validate_comparison_specs(specs, args.baseline_label)
     args.output.mkdir(parents=True, exist_ok=False)
     models = {spec.label: StaticModel.from_pretrained(spec.path, force_download=False) for spec in specs}
     model_gates = {

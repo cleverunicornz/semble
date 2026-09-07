@@ -114,6 +114,10 @@ post-SIF candidate on two separate surfaces:
   Tokio, Serde, and Axum, with dense and hybrid NDCG@10 reported overall and by
   language.
 
+The evaluator requires exactly those four labels with potion v2 as the
+baseline; an incomplete or shifted comparison is rejected rather than emitted
+as decision evidence.
+
 `run_cpu_full.sh` performs environment setup, Hub checksum verification, unit
 tests, balanced-data preparation, the non-evidentiary smoke, exact shallow
 materialization of all benchmark repositories, pristine full training, full
