@@ -90,6 +90,7 @@ target-version = "py310"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
 "benchmarks/*.py" = ["T20"]
+"benchmarks/model2vec_data/*.py" = ["T20"]
 "src/semble/cli.py" = ["T20", "E501"]
 "src/semble/installer/*.py" = ["T20", "E501"]
 

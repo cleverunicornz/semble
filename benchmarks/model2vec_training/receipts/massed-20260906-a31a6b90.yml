@@ -1,0 +1,180 @@
+schema_version: 1
+status: full-passed-promising-not-deployment-qualified
+run_id: mc-a31a6b90-20260906
+date: '2026-09-06'
+source:
+  repository: cleverunicornz/semble
+  training_revision: f586c664ae121da213910daabf7d8b3dd1ea81b2
+  packaging_repair_revision: c6ad289c6d046ab84527daf63635db4dbe980aac
+inputs:
+  rust_dataset:
+    id: Fortytwo-Network/Strandset-Rust-v1
+    revision: 0a8d223302712a2b34a6ad4ce1fd679031894b3d
+    scanned_rows: 191233
+  rust_train:
+    rows: 30893
+    sha256: 80d925621777cc890727a4bfe09fb39f12458e183c56b948c8238bf2f755a9c0
+  rust_eval:
+    rows: 3750
+    split: crate-disjoint
+    sha256: 7c68fc4086008a989dc86984786ce6330a54dc46575de25b2c37d1e5ab7a9966
+  balanced_training:
+    rows: 216251
+    rows_per_language: 30893
+    languages:
+      - rust
+      - go
+      - java
+      - javascript
+      - php
+      - python
+      - ruby
+    sha256: 5e1f9468ea35bd1746dcd4e34d95c80e5a2b4dd4f369012d7eac86e34cf452cd
+models:
+  initialization:
+    id: minishlab/potion-code-16M-v2
+    revision: e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b
+  comparison:
+    id: minishlab/potion-code-16M
+    revision: 1b0ff71095656b23306542bbad34a09109673720
+  candidate_raw:
+    dimensions: 256
+    model_safetensors_bytes: 32490072
+    model_safetensors_sha256: 6732ea99e934612cc53b732445bfefaab49d59eac288ab3eecd8b7e7339823cb
+  candidate_post_sif:
+    dimensions: 256
+    model_safetensors_bytes: 65487784
+    model_safetensors_sha256: 98b385d3028e63fa2ae4e2646a97001e985b2179a79ed52ac88585a281b0e844
+training:
+  mode: full
+  loss: MultipleNegativesRankingLoss
+  batch_sampler: NO_DUPLICATES
+  batch_size: 512
+  epochs: 3
+  learning_rate: 0.005
+  training_rows: 216251
+  changed_vocabulary_rows: 52183
+  final_train_loss: 0.629271470814638
+  duration_seconds: 231.18135089800012
+  samples_per_second: 2808.176
+evaluation:
+  duration_seconds: 3824.5642210190003
+  held_out_queries: 3750
+  full_rust_corpus_documents: 34643
+  repositories: 63
+  repository_queries_per_mode: 1251
+  rust_repository_queries_per_mode: 60
+  rust_full_corpus:
+    potion_v2:
+      dense:
+        recall_at_1: 0.40373333333333333
+        recall_at_5: 0.6645333333333333
+        recall_at_10: 0.7581333333333333
+        mrr: 0.5222641914950384
+      hybrid:
+        recall_at_1: 0.4
+        recall_at_5: 0.6962666666666667
+        recall_at_10: 0.7914666666666667
+        mrr: 0.5334744122507303
+    candidate_raw:
+      dense:
+        recall_at_1: 0.4576
+        recall_at_5: 0.7416
+        recall_at_10: 0.8205333333333333
+        mrr: 0.5826021566795695
+      hybrid:
+        recall_at_1: 0.42906666666666665
+        recall_at_5: 0.7370666666666666
+        recall_at_10: 0.8272
+        mrr: 0.5645634166658997
+    candidate_raw_minus_potion_v2:
+      dense_recall_at_1:
+        delta: 0.05386666666666667
+        ci95_low: 0.04293333333333333
+        ci95_high: 0.0648
+        mcnemar_exact_p: 1.654904882672698e-22
+      dense_mrr:
+        delta: 0.060337965184531044
+        ci95_low: 0.05307712605991581
+        ci95_high: 0.06766025652679684
+      hybrid_recall_at_1:
+        delta: 0.029066666666666668
+        ci95_low: 0.020266666666666665
+        ci95_high: 0.0376
+        mcnemar_exact_p: 5.783953222295044e-11
+      hybrid_mrr:
+        delta: 0.03108900441516941
+        ci95_low: 0.025771066348542652
+        ci95_high: 0.036487799947168456
+  real_repositories:
+    potion_v2:
+      all_languages_dense_ndcg_at_10: 0.654509190980445
+      all_languages_hybrid_ndcg_at_10: 0.8557858730986267
+      rust_dense_ndcg_at_10: 0.6160405364803009
+      rust_hybrid_ndcg_at_10: 0.8142352443980593
+    candidate_raw:
+      all_languages_dense_ndcg_at_10: 0.6491628075481037
+      all_languages_hybrid_ndcg_at_10: 0.8559960681726084
+      rust_dense_ndcg_at_10: 0.617108564952035
+      rust_hybrid_ndcg_at_10: 0.8195582583616179
+    candidate_raw_minus_potion_v2:
+      all_languages_dense:
+        delta: -0.005346383432341232
+        ci95_low: -0.013312518814263917
+        ci95_high: 0.002742884430852935
+      all_languages_hybrid:
+        delta: 0.0002101950739816944
+        ci95_low: -0.00417906446958484
+        ci95_high: 0.0045359911325393056
+      rust_dense:
+        delta: 0.0010680284717340541
+        ci95_low: -0.04898270568709198
+        ci95_high: 0.051809341348147485
+      rust_hybrid:
+        delta: 0.005323013963558639
+        ci95_low: -0.0042225002301454284
+        ci95_high: 0.020228767501209655
+execution:
+  provider: Massed Compute
+  instance_uuid: a31a6b90-43dd-4943-8105-8770ee07c5be
+  product: cpu_medium_amd_epyc
+  region: us-central-3
+  vcpus: 28
+  memory_gib: 80
+  price_usd_per_hour: 0.44
+  estimated_cost_usd_upper_bound_at_zero_instance_check: 0.68
+  terminated: true
+  zero_running_instances_confirmed_at: '2026-09-06T14:47:22Z'
+  environment:
+    python: 3.12.3
+    torch: 2.10.0+cpu
+    datasets: 5.0.1
+    sentence_transformers: 5.5.0
+    model2vec: 0.8.1
+gates:
+  focused_tests: 7-passed
+  full_training_rows: passed
+  cpu_only: passed
+  candidate_load_and_finite_vectors: passed
+  tokenizer_preservation: passed
+  full_held_out_rust_eval: passed
+  full_rust_corpus_eval: passed
+  complete_repository_suite: passed
+  independent_local_artifact_hash_verification: passed
+packaging:
+  initial_wrapper_exit: 1
+  failure: uv-created virtual environment lacked the pip module for python-m-pip-freeze
+  repair: uv-pip-freeze-with-explicit-python
+  training_rerun: false
+  evaluation_rerun: false
+artifacts:
+  local_directory: benchmarks/model2vec_training/out/mc-a31a6b90-20260906
+  final_archive: benchmarks/model2vec_training/out/mc-a31a6b90-20260906-final.tar.gz
+  final_archive_bytes: 252202409
+  final_archive_sha256: 730033c237f24a7dd98e381523f95faf7b49188e371c19ae9380b38fbe988653
+  evaluation_json_sha256: 568064c4c2f0f688e3224b3f85d2366df2cd1742f0296f7c03b7443fa4d0daf9
+boundary: >-
+  The full Strandset holdout shows statistically resolved gains for the raw
+  candidate. The 60-query real-Rust repository result is directionally positive
+  for hybrid retrieval but its 95 percent interval includes zero. The candidate
+  is promising experiment evidence and was not promoted or deployed.

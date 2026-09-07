@@ -1,0 +1,4 @@
+# Optional Parquet input support for benchmarks/model2vec_data.
+# JSONL inputs need nothing beyond the repo environment.
+# Benchmark-local only: production dependencies and uv.lock stay unchanged.
+pyarrow>=15.0
