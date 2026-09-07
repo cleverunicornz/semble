@@ -28,6 +28,6 @@ This DELTA records the new benchmark-only Model2Vec behavior without creating a 
 
 ## Closure state
 
-- Current run: 20260907T162944Z-54cd1f1645cf0b73b39eecffe503341508e0cf80 (open)
-- Last completed closure: run `20260906T211928Z-218ec16464c0290c6567e4cb29c3532d594bf75c`, opened at `1e6c4aa506cdd7843dddb19a2fe519480fc986f3`
-- Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-11/20260906T211928Z-218ec16464c0290c6567e4cb29c3532d594bf75c/`
+- Current run: none
+- Last completed closure: run `20260907T162944Z-54cd1f1645cf0b73b39eecffe503341508e0cf80`, opened at `663e6c70ccf5db0c9e7c96c669116f55c35fed68`
+- Transcript: `s3://cvu-automation-runs-uk/bedrock/cleverunicornz/semble/pr-14/20260907T162944Z-54cd1f1645cf0b73b39eecffe503341508e0cf80/`
