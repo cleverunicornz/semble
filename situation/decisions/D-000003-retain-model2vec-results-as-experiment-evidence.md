@@ -19,7 +19,7 @@ The new Model2Vec smoke and full contrastive paths produced retained run evidenc
 
 ## Decision
 
-Retain the smoke and full contrastive artifacts as experiment evidence and do not select or deploy either Model2Vec candidate.
+Retain the smoke and full contrastive artifacts as experiment evidence and do not select or deploy any Model2Vec candidate represented by those observations.
 
 ## Why
 
