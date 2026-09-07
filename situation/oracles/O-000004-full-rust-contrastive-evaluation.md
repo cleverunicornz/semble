@@ -23,7 +23,7 @@ implemented
 
 - F1: A mismatched Rust input, manifest, holdout overlap, or incomplete balanced training corpus proceeds as a full experiment.
 - F2: A missing, non-finite, non-256-dimensional, or tokenizer-altering candidate is reported as a successful full training result.
-- F3: A full-run invocation that omits any of the fixed four models, an invalid evaluation surface, or an incomplete pinned repository suite is reported as a successful full evaluation.
+- F3: A standalone `evaluate_full.py` receipt is treated as a full-experiment evaluation without the fixed four-model `run_cpu_full.sh` invocation, or an invalid evaluation surface or incomplete pinned repository suite is reported as a successful full evaluation.
 - F4: The retained result lacks the provenance needed to identify its run or represents a candidate as selected or deployed.
 
 ## Implementation
@@ -40,5 +40,5 @@ implemented
 | P4 | Retain provenance and the non-deployment boundary with the result | manual |
 | F1 | Bad identity, holdout overlap, or wrong balanced corpus stops the preparation path | `benchmarks/model2vec_training/prepare_contrastive.py::validate_rust_inputs`; `benchmarks/model2vec_training/prepare_contrastive.py::prepare` |
 | F2 | Failed full-training gates prevent a passing training receipt | `benchmarks/model2vec_training/train_contrastive.py::train` |
-| F3 | The full wrapper declares all four comparison models; supplied paths and false evaluation gates prevent a successful receipt | `benchmarks/model2vec_training/run_cpu_full.sh` (fixed four `--model` arguments); `benchmarks/model2vec_training/evaluate_full.py::parse_model_specs`; `benchmarks/model2vec_training/evaluate_full.py::evaluate` |
+| F3 | Establish the fixed wrapper invocation manually; supplied model paths and false evaluation gates decide invalid input and surface cases | manual for the fixed-invocation boundary; `benchmarks/model2vec_training/evaluate_full.py::parse_model_specs`; `benchmarks/model2vec_training/evaluate_full.py::evaluate` |
 | F4 | Missing provenance or a deployment interpretation fails the retained-evidence judgment | manual |
