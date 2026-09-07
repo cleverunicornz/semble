@@ -8,23 +8,23 @@
 
 ## Phase
 
-`INITIAL` — this is the first situation context on this branch; the opening tree already contains the package implementation, and this BACKPORT begins its repository-knowledge projection.
+`EVOLUTION` — the repository has an established Bedrock knowledge projection, and this DELTA records a new benchmark-only Model2Vec capability alongside the existing package behavior.
 
 ## Implementation map
 
 - `src/semble/` — package implementation for indexing, chunking, ranking, search, and workspace handling.
 - `src/semble/cli.py` and `src/semble/mcp.py` — command-line and context-bound MCP surfaces.
 - `src/semble/git_workspace.py` and `src/semble/workspace.py` — Git-bound baseline and changed-workspace services.
-- `benchmarks/` — benchmark fixtures, evaluation scripts, and retained result artifacts, including the evaluation-only native chunker comparison at `benchmarks/chunker_eval.py`.
+- `benchmarks/` — benchmark fixtures, Model2Vec sample-preparation and smoke/full training-evaluation surfaces, and retained result artifacts, including the evaluation-only native chunker comparison at `benchmarks/chunker_eval.py`.
 - `tests/` — regression suite; `.github/workflows/ci.yaml` is inherited workflow evidence, not an assured fork gate route.
 
 ## Current state
 
-The repository retains upstream-owned source, documentation, configuration, and workflows unchanged by this closure. Fork orientation lives only in root `AGENTS.md` and `situation/`.
+The current branch includes benchmark-only Model2Vec data preparation, smoke/full training, evaluation, and retained receipt surfaces. Fork orientation lives only in root `AGENTS.md` and `situation/`.
 
 ## Intended state
 
-This BACKPORT records existing repository knowledge without creating a fork-specific production behavior or gate-assurance commitment.
+This DELTA records the Model2Vec benchmark behavior and evidence without creating a production Model2Vec deployment or a fork gate-assurance commitment.
 
 ## Closure state
 
