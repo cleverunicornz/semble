@@ -1,0 +1,11 @@
+model2vec==0.8.1
+numpy==2.4.4
+orjson==3.11.9
+pathspec==1.1.1
+questionary==2.1.1
+semble-grammars==0.1.2
+sentence-transformers==5.5.0
+torch==2.10.0
+transformers==5.8.0
+vicinity==0.4.4
+watchfiles==1.2.0
