@@ -152,6 +152,12 @@ Repository-specific orientation belongs in the repository block that follows.
 - A pull request that carried a Bedrock closure merges with a merge commit,
   never a squash or rebase, so its checkpoint commits stay reachable from the
   trunk.
+
+- Every pull request into a Bedrock-enrolled trunk requires a completed
+  Bedrock closure before it can merge. Request the closure with the exact
+  Integrity phrase when the pull request is ready for it, and never merge
+  before the closing checkpoint; branch protection enforces the same gate
+  through the Bedrock review.
 - All internal reach rides the tailnet. Public-IP access is break-glass only.
 
 ### Forks
