@@ -4,7 +4,7 @@ implemented
 
 ## Promise
 
-For valid local Rust input and a new or empty destination, the Model2Vec sample-preparation surface writes canonical pair and corpus training/evaluation JSONL artifacts plus a manifest; identical input and configuration select the same artifacts, held-out evaluation content is excluded from training-side exact code/text, and dataset field strings are treated as data rather than executable input.
+For valid local Rust input and a new or empty destination, the Model2Vec sample-preparation surface writes canonical pair and corpus training/evaluation JSONL artifacts plus a manifest; identical input and configuration select the same artifacts, held-out evaluation content is excluded from training-side exact code/text, and dataset field strings are treated as data rather than executable input. Invalid configuration, missing required Rust input, and occupied destinations are rejected without overwriting user data.
 
 ## Scope
 
