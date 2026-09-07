@@ -27,7 +27,7 @@ PASS
 
 | Leg | Evidence |
 |---|---|
-| P1 | The receipt `inputs` block identifies the pinned Rust source, its training/evaluation identities, and the balanced training corpus; `gates` records `full_training_rows: passed`. |
+| P1 | The receipt `inputs` block identifies the pinned Rust source, declares the evaluation split crate-disjoint, and names the training/evaluation identities and balanced training corpus; `gates` records `full_training_rows: passed`. |
 | P2 | The receipt `models` and `training` blocks identify both candidate artifacts and their dimensions; `gates` records finite candidate loading, vector, and tokenizer checks. |
 | P3 | The receipt `evaluation` block contains the held-out/full-corpus Rust and real-repository observations; `gates` records complete held-out Rust, full Rust corpus, and repository-suite evaluation. |
 | P4 | The receipt `source`, `artifacts`, and `boundary` blocks identify retained evidence and state that the candidate is promising experiment evidence rather than a promoted or deployed candidate. |
