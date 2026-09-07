@@ -8,7 +8,7 @@ The full Rust contrastive experiment verifies the prescribed input identities, t
 
 ## Scope
 
-This promise covers `benchmarks/model2vec_training/prepare_contrastive.py`, `train_contrastive.py`, `evaluate_full.py`, `sync_evaluation_repos.py`, and `run_cpu_full.sh`; the pinned model, Rust, replay, and repository inputs they name; both candidate artifact directories; and their emitted manifests, receipts, and summaries. It covers only the full offline experiment and supplied pinned inputs.
+This promise covers `benchmarks/model2vec_training/prepare_contrastive.py`, `benchmarks/model2vec_training/train_contrastive.py`, `benchmarks/model2vec_training/evaluate_full.py`, `benchmarks/model2vec_training/sync_evaluation_repos.py`, and `benchmarks/model2vec_training/run_cpu_full.sh`; the pinned model, Rust, replay, and repository inputs they name; both candidate artifact directories; and their emitted manifests, receipts, and summaries. It covers only the full offline experiment and supplied pinned inputs.
 
 ## Oracle
 
