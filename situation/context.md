@@ -8,7 +8,7 @@
 
 ## Phase
 
-`EVOLUTION` — the repository has an established Bedrock knowledge projection, and this DELTA records a new benchmark-only Model2Vec capability alongside the existing package behavior.
+`INITIAL` — this DELTA retains the repository's declared initial phase while recording a benchmark-only Model2Vec capability alongside the existing package behavior.
 
 ## Implementation map
 
