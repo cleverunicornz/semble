@@ -10,7 +10,7 @@ the structure, identifier rules, and relationships between namespaces.
 - `oracles/` — judgment rules that decide whether a promise holds
 - `witnesses/` — immutable observations from real runs
 - `decisions/` — append-only records of why a choice collapsed
-- `gaps/` — bounded repository-relevant absences
+- `gaps/` — repository-relevant absences, concerns, and uncertainties
 - `candidates/` — evidence-derived possibilities, not commitments
 - `plans/` — thin containers grouping candidates and promises into work
 - `references/` — retained depth linked from records
@@ -95,13 +95,29 @@ after applying the oracle to available witnesses. A decision explains why a
 path was accepted or rejected; an invariant states the binding rule that
 results.
 
+Working a change means traversing the links: from the affected behavior to
+its promise, the oracle judging it, the witnesses observed under it, and the
+decisions, candidates, and gaps linked to them. A record set that cannot be
+traversed from the affected behavior to its lineage is incomplete for that
+behavior. This is authoring discipline over the links the record contracts
+already require; no tooling performs it.
+
+A contract composed over several repositories' behavior — an organization,
+program, or project contract — selects and links the local promises that
+carry each behavior; it does not restate them. Linking keeps one authority
+per behavior; restating local behavior in the composing contract creates a
+second, drifting authority. A local change's lineage obligation is not
+discharged by a higher-level contract mentioning the behavior.
+
 ## Gaps, Candidates, and the learning loop
 
-A Gap records a bounded absence relevant to existing repository behavior or
-work. A Candidate records an evidence-derived possible response. Candidates are
-not commitments. Plans qualify Candidates and implement/assure Promises. A
-Decision promotes or rejects a Candidate; promotion creates the falsifiable
-Promise and Oracle atomically.
+A Gap preserves an absence, concern, or uncertainty encountered during work;
+`gaps/AGENTS.md` governs incidental reporting, related observations, and later
+disposition. A Candidate records an evidence-derived possible response.
+Candidates are not commitments. Plans qualify Candidates and implement/assure
+Promises. A Decision promotes or rejects a Candidate; promotion creates the
+falsifiable Promise and Oracle atomically. Reporting a Gap does not assign any
+of those subsequent steps to its reporter.
 
 ```text
 Promise -> implementation -> Oracle -> Witness -> disposition
@@ -130,6 +146,10 @@ intended rather than implemented.
 
 ## Bedrock operation
 
+Bedrock closure automation is not running. This section, Runs, and Closure
+state describe it for when it returns; agents do not request, open, or perform
+closures.
+
 Repository phase and closure operation are separate classifications:
 
 - `INITIALIZE` — no substantive donor or implementation; install the
@@ -145,6 +165,10 @@ Every run records its operation in its opening checkpoint.
 DELTA reviews `git diff <last closing checkpoint>..<trigger head>`. That diff is
 the complete review surface; an empty diff means there is no closure work. No
 parallel donor registry or copied donor snapshot exists.
+
+A delta that affects claimed behavior repairs that behavior's missing local
+Promise, Oracle, and Witness lineage in its own run; missing lineage the diff
+does not affect is Gap material.
 
 ## Runs
 
@@ -175,6 +199,9 @@ by the next run's opening checkpoint.
 A record is immutable from the first closing checkpoint that follows its
 creation or change. Until then, on the open pull request, it may be corrected
 in place by a forward commit.
+Gaps permit append-only observations after closure and separately assigned
+State/Resolution updates as defined in `gaps/AGENTS.md`; earlier observations
+remain unchanged.
 
 ## Closure state
 
@@ -204,8 +231,8 @@ with subject `bedrock: complete closure <run-id>` is the DELTA base.
 Every run records ownership and, for forks, the upstream coordinate in
 `context.md` and the repository block of root `AGENTS.md`. Upstream
 synchronization and contribution are separate operations outside Bedrock that
-follow the organization's fork rules in the root organization block; Bedrock
-does not restate them.
+follow the organization's fork rules in the organization layer; Bedrock does
+not restate them.
 
 ## README lifecycle
 
@@ -221,8 +248,8 @@ root `AGENTS.md` stabilize:
 README never overrides records under `situation/`.
 
 During a Bedrock closure, upstream-owned files remain untouched by the
-knowledge projection; fork orientation lives only in the root `AGENTS.md`
-blocks and `situation/`. This restriction governs Bedrock alignment, not
+knowledge projection; fork orientation lives only in the repository block of
+root `AGENTS.md` and `situation/`. This restriction governs Bedrock alignment, not
 ordinary product changes made through the fork's working trunk.
 
 ## Documentation classification
@@ -241,20 +268,19 @@ runtime, build, test, release, or delivered documentation artifact.
 On `UPSTREAM_FORK`, Bedrock does not remove or rewrite upstream-owned
 documentation to impose repository-operational orientation.
 
-## Root AGENTS.md blocks
-
-Root `AGENTS.md` carries three tagged blocks in this order:
+## Instruction layers
 
 - `bedrock-protocol` — protocol-owned; the published root protocol block,
-  installed byte-for-byte and immutable to agents.
-- `bedrock-organization` — organization-owned; synchronized by the closure
-  automation and immutable to agents. It is optional; adopters whose automation
-  supplies none carry the other two blocks.
-- `bedrock-repository` — repository-owned; written by the closer in the shape
-  given by the repository block template published with the protocol release
-  and reproduced in the closure automation.
+  supplied byte-for-byte at user level, outside the repository, and immutable
+  to agents.
+- `bedrock-repository` — repository-owned; the only content of the
+  repository's root `AGENTS.md`, written by the closer in the shape given by
+  the repository block template published with the protocol release and
+  reproduced in the closure automation.
 
-Agents edit only the repository block.
+An organization may supply its own operating layer at user level beside the
+protocol block; organization-wide rules, including fork rules, live there and
+never in a repository. Agents edit only the repository block.
 
 ## AGENTS.md placement
 

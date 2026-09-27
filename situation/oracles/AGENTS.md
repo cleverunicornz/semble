@@ -50,10 +50,21 @@ leg is valid, but witnesses must carry direct evidence for it.
 - The Oracle collectively decides every explicit clause of the Promise inside
   its declared Scope. It must not broaden the Promise, judge behavior outside
   Scope, or attempt to disprove infinite negative space. Outside-Scope behavior
-  is neither a failed leg nor a validation finding.
+  is not a failed leg or a failure of that Promise; incidental concerns may
+  still be surfaced as Gaps.
+- The oracle judges the promise's stated contract — including requirements
+  adopted by reference — never the implementation's current behavior as the
+  contract's source; how the code happens to behave is an observation, and
+  the Pass and Fail conditions decide.
 - Scope bounds the positive behavioral claim even when the Promise is phrased
   as a prohibition. Residual names only relevant unassured boundaries; it does
   not enumerate everything the software could theoretically do.
+- Conclude assurance when the predeclared Oracle passes on adequate evidence
+  for every leg, with no concrete in-Scope contradiction left unresolved.
+  Further investigation should address a specific concern grounded in code,
+  observations, or applicable contracts that could change that judgment.
+  Surface other concerns under `situation/gaps/AGENTS.md`; recording a Gap
+  neither changes the Oracle's result nor silently narrows its Promise.
 - `implemented` requires at least one executable leg. A wholly manual
   oracle remains `designed`.
 - One oracle may judge one promise. When a judgment rule serves multiple

@@ -45,6 +45,12 @@ Promotion requires precise falsifiable behavior, Scope, Residual, Oracle inputs,
 Pass/Fail conditions, and the Decision selecting it. If these cannot be stated,
 the Candidate remains `qualifying`.
 
+Before promotion a Candidate carries no reliance and no assurance
+obligations; after promotion the resulting Promise is the selected
+commitment. Implementation that exists is evidence, not selection: code in
+the repository does not promote a Candidate, and a promoted Promise is not
+redefined by what the implementation does. The Decision is the boundary.
+
 ## Relationship rules
 
 - `promoted` links Decision, Promise, and Oracle.
