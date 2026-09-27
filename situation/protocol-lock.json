@@ -1,7 +1,7 @@
 {
   "repository": "cleverunicornz/yeetz-bedrock-protocol",
-  "release": "v1.9.3",
-  "commit": "ff19bd9326489dcdbecbd22c7cf22cbedef63168",
+  "release": "v1.12.1",
+  "commit": "d6da20e5b0325100147f76ae6ebc23cdbed1fbeb",
   "automation_package": {
     "repository": "cleverunicornz/infrastructure",
     "version": "1.1.6",
@@ -9,22 +9,22 @@
   },
   "root_protocol": {
     "source": "templates/root-protocol.md",
-    "sha256": "dce013c0afbfcafe58407e7f72ab89c80d5275e5f162c3168171f7b5a7d1b9ff"
+    "sha256": "aed76f348a9f1c67a72697e1bf007faec95d46eee9a2f3323db789ebc6e0330f"
   },
   "files": {
-    "situation/AGENTS.md": "5767bb58aaa27bf5b0a1c761281d480c8240ac170659d30e5a33bb55a42fb529",
-    "situation/candidates/AGENTS.md": "93a93fec5fdf78e9a847d3fe19f4a6b041f9221ee101e9a6d78d841a3eec10c9",
+    "situation/AGENTS.md": "5d46cca6dd1a07c3e8631865ab885bd219206ce9299b2f17473dc227c0389144",
+    "situation/candidates/AGENTS.md": "7b796a8268d1e21b5fb23df24ec7e6f337032c01d53766d0a32116c549a1bace",
     "situation/decisions/AGENTS.md": "35cb11346c4b2c9543e73b9fd1a742ee175730f3a84aca7dd19a2d1dadceb9a2",
-    "situation/gaps/AGENTS.md": "e5d13ac237706188e030b3cbf27443ec9afa4db2645c80695a41ab2e3c011b83",
+    "situation/gaps/AGENTS.md": "63077e0ed5ff06a08c9f384a16ea950d04c3532014687b59735284f1770c9d82",
     "situation/invariants/AGENTS.md": "0c1d2ff334e419d4c057dcf3bc615899bfbe9ad2824c4e1d2b1cc588b8bd7c4f",
-    "situation/oracles/AGENTS.md": "48b42f0602e95183c581acf39d067e12b36026492d2811ffff3bd144cfbf3402",
+    "situation/oracles/AGENTS.md": "752f67f269ec732e3546bc35e4634d41a95069ad461e9a3519b7743d1ef8a8d7",
     "situation/plans/AGENTS.md": "5b84a08ecc490f4fc666f1beb0dae70d7c06ffc66db8e0cd356144a24dce5051",
-    "situation/promises/AGENTS.md": "9b8ec140d2d9915f8151b8f8277288ad49e58188a9cc41b6900736a1b2a60429",
-    "situation/references/AGENTS.md": "41698ac88408a3b07eb141646ddd5f0acbfd4bd7fcdc49655e959a1f77b8a559",
+    "situation/promises/AGENTS.md": "4afbe91dd7a57f57092658795386477e6276d1287c21daac3cee7f3c0ce77188",
+    "situation/references/AGENTS.md": "ec630fdd1350106c100fa5d40c57bdfa25c45f518f9f1ba25057f5af5396efcf",
     "situation/witnesses/AGENTS.md": "982ee98b719dd752599cf5a6585d18e604b849f598fa21f36cb2492b2e410cb5"
   },
   "organization": {
-    "version": "1.1.3",
-    "sha256": "2a859a024390852cac610ed297c3d505009bb0c08049d65b59d6def810bd0f2b"
+    "version": "1.12.1",
+    "sha256": "11f2d29e9a28d268ffa5ad856b8deca6dc1d58ce02f5d5ba5efe751092239ea5"
   }
 }

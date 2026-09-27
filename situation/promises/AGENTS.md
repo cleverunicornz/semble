@@ -59,6 +59,44 @@ behavior asserted in the Promise section. Any behavior not exercised by the
 witnesses must be named explicitly in Residual as outside the assurance.
 Residual cannot silently narrow the behavior marked invariant by `assured`.
 
+## Granularity
+
+A promise is written at the granularity of a capability a consumer can
+meaningfully rely on: an interface, an operation, or an observable behavior.
+Never one promise per file, function, or endpoint. Detailed requirements
+belong in the stated behavior, in an adopted specification, or in linked
+records — not in a fan of per-unit promises. The converse bound applies:
+granularity too coarse to judge falsifiably is still too coarse.
+
+## Adopted specifications
+
+A promise may adopt a specification by reference for detailed requirements:
+an API description, a schema, a standard. The reference pins the exact
+adopted version. Reference discipline is defined in `situation/AGENTS.md`.
+Adopted requirements are part of the promise's contract within Scope; the
+oracle judges them like any stated requirement.
+
+Selecting a different version of an adopted specification changes the
+contract. On an assured promise that change takes the supersession path
+already defined: a superseding promise, a decision, a replacement oracle,
+and new witnesses. Reading a moved or updated specification as if it were
+the pinned one is drift, not compliance. Behavior a human has accepted is
+the behavior the promise states, never whatever the implementation happens
+to do; code matching current behavior is an observation, not the contract
+and not assurance.
+
+## Retrospective records
+
+Records may be created after the behavior they describe exists; a
+retrospective promise is valid. State the actual creation context honestly
+and cite only evidence that exists: the implementing commit, the pull
+request, or the run. Let the normal lifecycle states describe when
+feasibility and assurance actually arrived. Never backdate, never invent a
+witness or a predeclared oracle, and never rewrite dates or evidence so
+that assurance looks predeclared. An oracle designed after implementation
+is ordinary; it still requires real witnesses on real runs before
+`assured`.
+
 ## Rules
 
 - A promise states behavior, not implementation detail.
